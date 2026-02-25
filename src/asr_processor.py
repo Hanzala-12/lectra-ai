@@ -41,13 +41,21 @@ class ASRProcessor:
         """Load Whisper model"""
         try:
             import whisper
+            import os
+            
+            # Use local models folder
+            models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
+            os.makedirs(models_dir, exist_ok=True)
+            
+            logger.info(f"Loading Whisper {self.model_size} model to {models_dir}")
             
             self.model = whisper.load_model(
                 self.model_size,
-                device=self.device
+                device=self.device,
+                download_root=models_dir
             )
             
-            logger.info(f"Whisper model loaded successfully")
+            logger.info(f"Whisper model loaded successfully from {models_dir}")
             
         except Exception as e:
             logger.error(f"Error loading Whisper model: {e}")

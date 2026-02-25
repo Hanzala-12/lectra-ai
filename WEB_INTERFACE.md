@@ -28,9 +28,12 @@ The interface will open automatically at **http://localhost:8501**
 
 **You don't need to manually download anything!**
 
+**No tokens or accounts needed** - Whisper is 100% open-source and free!
+
 On first use, Whisper will automatically download the selected model to:
-- **Windows:** `C:\Users\YourName\.cache\whisper\`
+- **Project folder:** `d:\fyp\models\`
 - **Model files:** `.pt` format (PyTorch models)
+- **One-time download** - Reused forever!
 
 ### Model Comparison
 
@@ -92,10 +95,16 @@ Processed files are temporarily stored during web session but can be downloaded:
 ### Model Cache
 Whisper models are permanently cached at:
 ```
-C:\Users\YourName\.cache\whisper\
+d:\fyp\models\
 ```
 
 You only download each model once!
+
+**Important Notes:**
+- ✅ **NO tokens needed** - Whisper is open-source
+- ✅ **NO account needed** - Free to use
+- ✅ **Local storage** - Models stay in your project folder
+- ⚠️ **Diarization only** needs HuggingFace token (optional feature)
 
 ---
 

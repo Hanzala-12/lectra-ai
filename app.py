@@ -210,6 +210,12 @@ st.sidebar.info("""
 4. 🔄 Silent-bed transplant
 5. 🗣️ Speaker diarization
 6. 📝 Speech recognition
+
+**Models Location:**
+📁 `d:\\fyp\\models\\`
+
+**No tokens needed for Whisper!**
+Models download automatically.
 """)
 
 # Main content

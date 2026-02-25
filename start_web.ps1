@@ -22,8 +22,10 @@ if ($LASTEXITCODE -ne 0) {
 # Check for Whisper models
 Write-Host "`n📦 Whisper Model Info:" -ForegroundColor Yellow
 Write-Host "  - Models download automatically on first use" -ForegroundColor White
-Write-Host "  - Stored in: ~\.cache\whisper\" -ForegroundColor White
+Write-Host "  - Stored in: d:\fyp\models\" -ForegroundColor White
 Write-Host "  - Recommended: 'base' model (good balance)" -ForegroundColor White
+Write-Host "  - 'large' model available (best quality)" -ForegroundColor White
+Write-Host "  - NO tokens or accounts needed - 100% free!" -ForegroundColor Green
 Write-Host ""
 
 # Start Streamlit
