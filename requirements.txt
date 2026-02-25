@@ -13,7 +13,7 @@ pydub>=0.25.1
 deepfilternet>=0.5.6
 
 # Voice Activity Detection
-webrtcvad>=2.0.10
+webrtcvad-wheels>=2.0.10  # Pre-compiled version for Windows compatibility
 silero-vad>=4.0.0
 
 # Diarization
