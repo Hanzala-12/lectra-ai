@@ -25,9 +25,12 @@ wheels/
 
 # Models
 models/
+!models/README.md
 *.pt
 *.pth
 *.onnx
+*.bin
+*.safetensors
 
 # Data
 uploads/

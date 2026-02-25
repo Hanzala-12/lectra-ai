@@ -80,14 +80,30 @@ pip install -r requirements.txt
    - Download from: https://ffmpeg.org/download.html
    - Add to system PATH
 
-5. **Setup Hugging Face token** (for diarization)
+5. **Setup Hugging Face token** (for diarization - optional)
 ```bash
-# Set environment variable
-set HUGGING_FACE_HUB_TOKEN=your_token_here
+# Set environment variable (PowerShell)
+$env:HUGGING_FACE_HUB_TOKEN="your_token_here"
+
+# Or permanently
+[System.Environment]::SetEnvironmentVariable('HUGGING_FACE_HUB_TOKEN', 'your_token_here', 'User')
 ```
-Get your token from: https://huggingface.co/settings/tokens
+- Get token: https://huggingface.co/settings/tokens
+- Accept license: https://huggingface.co/pyannote/speaker-diarization-3.1
+- **Note:** Only needed if you want speaker diarization. Noise removal and transcription work without it!
+
+**Models Storage:**
+- All AI models download to `d:\fyp\models\` folder
+- Whisper models: No token needed (~75MB-3GB depending on model)
+- Diarization models: Token required (~700MB on first use with diarization enabled)
 
 ## Quick Start
+
+### Web Interface (Recommended)
+```bash
+.\start_web.ps1
+```
+Opens at http://localhost:8501 - Upload files, adjust settings, download results!
 
 ### Process a single audio file
 ```bash

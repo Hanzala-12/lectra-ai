@@ -5,7 +5,9 @@ Identifies who spoke when in the audio
 
 import numpy as np
 import torch
+import os
 from typing import List, Dict, Tuple
+from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -39,12 +41,25 @@ class SpeakerDiarization:
         try:
             from pyannote.audio import Pipeline
             
+            # Set local models directory
+            project_root = Path(__file__).parent.parent
+            models_dir = project_root / "models" / "pyannote"
+            models_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Set HuggingFace cache to local directory
+            os.environ['HF_HOME'] = str(models_dir)
+            os.environ['TORCH_HOME'] = str(models_dir)
+            
+            logger.info(f"Using models directory: {models_dir}")
+            
             # Load pretrained pipeline
             # Note: Requires HuggingFace token for access
             # Set environment variable: HUGGING_FACE_HUB_TOKEN
+            logger.info("Loading speaker diarization model (downloads ~700MB on first use)...")
             self.pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
-                use_auth_token=True
+                use_auth_token=True,
+                cache_dir=str(models_dir)
             )
             
             self.pipeline.to(torch.device(self.device))

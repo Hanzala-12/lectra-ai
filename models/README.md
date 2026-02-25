@@ -18,22 +18,55 @@ Whisper speech recognition models will be automatically downloaded here on first
 
 *Internet speed dependent
 
+## 🗣️ Pyannote Models (Auto-Downloaded with Token)
+
+Speaker diarization models from pyannote.audio will be stored in `models/pyannote/` subfolder.
+
+### What Gets Downloaded:
+
+| Model | Size | Purpose |
+|-------|------|---------|
+| Speaker Diarization | ~300 MB | Main diarization model |
+| Speaker Embeddings | ~400 MB | Speaker recognition |
+| **Total** | **~700 MB** | Auto-downloads on first use |
+
+### 🔑 Token Required:
+
+**pyannote.audio requires HuggingFace token** (free account):
+
+1. Get token: https://huggingface.co/settings/tokens
+2. Accept license: https://huggingface.co/pyannote/speaker-diarization-3.1
+3. Set in PowerShell:
+```powershell
+$env:HUGGING_FACE_HUB_TOKEN="your_token_here"
+```
+
 ### 🔓 No Tokens or Accounts Needed!
 
+**For Whisper models:**
 - ✅ **100% Open Source** - Whisper is free
 - ✅ **No Registration** - Download directly
 - ✅ **Local Storage** - Models stay here forever
 - ✅ **One-Time Download** - Reused for all future processing
 
+**For pyannote.audio:**
+- ⚠️ **Requires HuggingFace token** (free account)
+- ✅ **One-Time Setup** - Token saved in environment
+- ✅ **Local Storage** - Models cached here forever
+
 ### 📁 What Gets Stored Here:
 
 ```
 models/
-├── tiny.pt       (if you use tiny model)
-├── base.pt       (if you use base model)
-├── small.pt      (if you use small model)
-├── medium.pt     (if you use medium model)
-└── large.pt      (if you use large model)
+├── tiny.pt           (Whisper tiny model)
+├── base.pt           (Whisper base model)
+├── small.pt          (Whisper small model)
+├── medium.pt         (Whisper medium model)
+├── large.pt          (Whisper large model)
+└── pyannote/         (Diarization models folder)
+    ├── models--pyannote--speaker-diarization-3.1/
+    ├── models--pyannote--wespeaker-voxceleb-resnet34-LM/
+    └── ... (various diarization models)
 ```
 
 ### 🚀 First Time Use:

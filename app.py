@@ -213,9 +213,13 @@ st.sidebar.info("""
 
 **Models Location:**
 📁 `d:\\fyp\\models\\`
+- Whisper: No token needed
+- Diarization: ~700MB (needs token)
 
-**No tokens needed for Whisper!**
-Models download automatically.
+**Token Setup:**
+```powershell
+$env:HUGGING_FACE_HUB_TOKEN="your_token"
+```
 """)
 
 # Main content
