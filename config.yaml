@@ -1,0 +1,35 @@
+# Voice Cleaning Pipeline Configuration
+
+audio:
+  sample_rate: 16000  # 16kHz for optimal processing
+  chunk_duration: 30  # seconds per chunk for processing
+  
+vad:
+  # Pre-VAD trim settings
+  aggressiveness: 3  # 0-3, higher = more aggressive filtering
+  frame_duration_ms: 30  # 10, 20, or 30 ms
+  padding_duration_ms: 300  # padding around speech segments
+  min_speech_duration_ms: 250  # minimum speech segment length
+  
+deepfilternet:
+  model: "DeepFilterNet3"  # DeepFilterNet2 or DeepFilterNet3
+  post_filter: true  # additional post-processing
+  
+silent_bed:
+  fade_duration_ms: 20  # crossfade duration for transplant
+  preserve_original_silence: true  # keep original silent portions
+  
+diarization:
+  enabled: true
+  min_speakers: 1
+  max_speakers: 10
+  
+asr:
+  model: "base"  # tiny, base, small, medium, large
+  language: "en"  # auto-detect if null
+  compute_type: "float16"  # float16, int8, or float32
+  
+output:
+  format: "wav"  # wav, mp3, flac
+  bit_depth: 16  # 16 or 24 for wav
+  preserve_video: true  # if input is video, merge cleaned audio back
