@@ -3,6 +3,9 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Voice Cleaning Pipeline - Full Stack" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
+# AUTO-SETUP: Force D: drive venv (automatic, no manual steps!)
+. "$PSScriptRoot\use_venv.ps1"
+
 Write-Host "`nThis will start both servers in separate windows:" -ForegroundColor Yellow
 Write-Host "  - Backend (FastAPI): http://localhost:8000" -ForegroundColor White
 Write-Host "  - Frontend (React): http://localhost:3000" -ForegroundColor White

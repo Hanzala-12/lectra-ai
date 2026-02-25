@@ -14,31 +14,36 @@ class ASRProcessor:
     """Automatic Speech Recognition using Whisper"""
     
     def __init__(self,
-                 model_size: str = "base",
+                 model_size: str = "tiny",
                  language: Optional[str] = "en",
                  device: str = None,
-                 compute_type: str = "float16"):
+                 compute_type: str = "int8"):
         """
         Args:
             model_size: Model size (tiny, base, small, medium, large)
             language: Language code or None for auto-detection
             device: torch device (cuda/cpu)
-            compute_type: Computation type (float16, int8, float32)
+            compute_type: Computation type (int8 for CPU, float16 for GPU, float32)
         """
         self.model_size = model_size
         self.language = language
         self.compute_type = compute_type
         
         if device is None:
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.device = 'cpu'  # Default to CPU for laptops
         else:
             self.device = device
         
-        logger.info(f"Initializing Whisper {model_size} on {self.device}")
+        # Optimize settings for CPU
+        if self.device == 'cpu' and compute_type == 'float16':
+            logger.warning("float16 not efficient on CPU, switching to int8")
+            self.compute_type = 'int8'
+        
+        logger.info(f"Initializing Whisper {model_size} on {self.device} with {self.compute_type}")
         self._load_model()
     
     def _load_model(self):
-        """Load Whisper model"""
+        """Load Whisper model with CPU optimization"""
         try:
             import whisper
             import os
@@ -54,6 +59,21 @@ class ASRProcessor:
                 device=self.device,
                 download_root=models_dir
             )
+            
+            # Apply CPU optimizations
+            if self.device == 'cpu':
+                # Enable inference mode for faster CPU processing
+                self.model.eval()
+                
+                # Disable gradient computation
+                for param in self.model.parameters():
+                    param.requires_grad = False
+                
+                # Use optimized operators for CPU
+                if hasattr(torch, 'set_num_threads'):
+                    torch.set_num_threads(4)  # Use 4 threads for CPU
+                
+                logger.info("Applied CPU optimizations: inference mode, 4 threads")
             
             logger.info(f"Whisper model loaded successfully from {models_dir}")
             

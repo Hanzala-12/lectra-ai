@@ -2,6 +2,9 @@
 Write-Host "Starting Voice Cleaning Frontend..." -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 
+# AUTO-SETUP: Force D: drive venv (automatic, no manual steps!)
+. "$PSScriptRoot\use_venv.ps1"
+
 # Check if Node.js is installed
 $nodeVersion = node --version 2>$null
 if (-not $nodeVersion) {

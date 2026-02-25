@@ -16,6 +16,7 @@ from deepfilter_processor import DeepFilterProcessor
 from silent_bed import SilentBedTransplant
 from diarization import SpeakerDiarization
 from asr_processor import ASRProcessor
+from cache_manager import FileCache
 
 # Setup logging
 logging.basicConfig(
@@ -27,14 +28,23 @@ logger = logging.getLogger(__name__)
 class VoiceCleaningPipeline:
     """Main pipeline for voice cleaning with your optimized workflow"""
     
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "config.yaml", enable_cache: bool = True):
         """
         Initialize pipeline with configuration
         
         Args:
             config_path: Path to configuration file
+            enable_cache: Enable file-based caching for faster repeated processing
         """
         self.config = self._load_config(config_path)
+        self.enable_cache = enable_cache
+        
+        if self.enable_cache:
+            self.cache = FileCache(cache_dir="./cache")
+            logger.info("File caching enabled - repeated files will process instantly!")
+        else:
+            self.cache = None
+        
         self._initialize_components()
     
     def _load_config(self, config_path: str) -> Dict[str, Any]:
@@ -150,8 +160,35 @@ class VoiceCleaningPipeline:
         Pipeline: Pre-VAD trim -> DeepFilterNet speech chunks -> 
                   silent-bed transplant with 20ms fades -> 
                   diarization + raw-ASR branch
+        import time
+        start_time = time.time()
         
-        Args:
+        logger.info(f"Starting voice cleaning pipeline for: {input_path}")
+        logger.info("=" * 70)
+        
+        # Check cache first
+        if self.enable_cache and self.cache:
+            cached = self.cache.get(input_path, self.config)
+            if cached:
+                logger.info("✅ CACHE HIT! Returning cached result instantly")
+                elapsed = time.time() - start_time
+                
+                # Copy cached file to output directory
+                output_dir = Path(output_dir)
+                output_dir.mkdir(parents=True, exist_ok=True)
+                
+                input_name = Path(input_path).stem
+                output_audio = output_dir / f"{input_name}_cleaned.wav"
+                
+                import shutil
+                shutil.copy2(cached['audio_path'], output_audio)
+                
+                return {
+                    'audio_output_path': output_audio,
+                    'transcript': cached['metadata'].get('result', {}).get('transcript', {}),
+                    'processing_time': elapsed,
+                    'from_cache': True
+                }
             input_path: Path to input audio/video file
             output_dir: Directory for output files
             save_transcript: Whether to save transcript
@@ -266,6 +303,8 @@ class VoiceCleaningPipeline:
         logger.info("\n" + "=" * 70)
         logger.info("Pipeline completed successfully!")
         
+        elapsed_time = time.time() - start_time
+        
         # Return results
         results = {
             'input_path': input_path,
@@ -276,8 +315,28 @@ class VoiceCleaningPipeline:
             'diarization': diarization_results,
             'duration_original': len(audio) / sr,
             'duration_processed': len(final_audio) / sr,
-            'speech_segments': len(speech_segments)
+            'speech_segments': len(speech_segments),
+            'processing_time': elapsed_time,
+            'from_cache': False
         }
+        
+        # Cache the results for next time
+        if self.enable_cache and self.cache:
+            try:
+                transcript_path = None
+                if save_transcript:
+                    transcript_path = str(output_dir / f"{input_name}_transcript.{transcript_format}")
+                
+                self.cache.set(
+                    input_path,
+                    self.config,
+                    results,
+                    str(audio_output_path),
+                    transcript_path
+                )
+                logger.info("✅ Results cached for faster future processing")
+            except Exception as e:
+                logger.warning(f"Failed to cache results: {e}")
         
         return results
 

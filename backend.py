@@ -2,10 +2,10 @@
 FastAPI Backend Server for Voice Cleaning Pipeline
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import Optional
 import uvicorn
 import os
@@ -15,13 +15,37 @@ import shutil
 import json
 from pathlib import Path
 import asyncio
+import logging
+import time
+import hashlib
+import torch
+from datetime import datetime
+
+try:
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("prometheus_client not installed. Metrics endpoint disabled.")
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from pipeline import VoiceCleaningPipeline
 
-app = FastAPI(title="Voice Cleaning API", version="1.0.0")
+# Setup structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="Voice Cleaning API",
+    version="1.0.0",
+    description="AI-powered voice cleaning with DeepFilterNet and Whisper"
+)
 
 # Enable CORS
 app.add_middleware(
@@ -36,20 +60,40 @@ app.add_middleware(
 pipeline = None
 processing_status = {}
 
+# Configuration
+MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "500"))
+ALLOWED_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.flac', '.aac', '.ogg', '.mp4', '.avi', '.mkv', '.mov', '.webm'}
+
 class ProcessingConfig(BaseModel):
     whisper_model: str = "base"
     enable_diarization: bool = True
     transcript_format: str = "txt"
+    
+    @validator('whisper_model')
+    def validate_model(cls, v):
+        allowed = ['tiny', 'base', 'small', 'medium', 'large']
+        if v not in allowed:
+            raise ValueError(f"Model must be one of {allowed}")
+        return v
+    
+    @validator('transcript_format')
+    def validate_format(cls, v):
+        allowed = ['txt', 'srt', 'vtt', 'json']
+        if v not in allowed:
+            raise ValueError(f"Format must be one of {allowed}")
+        return v
 
 def initialize_pipeline(config: ProcessingConfig):
     """Initialize pipeline with configuration"""
     global pipeline
     
     if pipeline is None:
-        pipeline = VoiceCleaningPipeline("config.yaml")
+        pipeline = VoiceCleaningPipeline("config.yaml", enable_cache=True)  # Enable caching
     
     # Update configuration
     pipeline.config['asr']['model'] = config.whisper_model
+    pipeline.config['asr']['device'] = 'cpu'  # Force CPU for laptops
+    pipeline.config['asr']['compute_type'] = 'int8'  # Use int8 for CPU optimization
     pipeline.config['diarization']['enabled'] = config.enable_diarization
     
     # Reinitialize ASR if model changed
@@ -57,7 +101,8 @@ def initialize_pipeline(config: ProcessingConfig):
     pipeline.asr = ASRProcessor(
         model_size=config.whisper_model,
         language=pipeline.config['asr'].get('language'),
-        compute_type=pipeline.config['asr']['compute_type']
+        device='cpu',  # Force CPU
+        compute_type='int8'  # Optimize for CPU
     )
     
     if not config.enable_diarization:
@@ -76,8 +121,16 @@ async def root():
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy"}
+    """Health check endpoint with system status"""
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat(),
+        "models_loaded": pipeline is not None,
+        "gpu_available": torch.cuda.is_available(),
+        "gpu_device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "cuda_version": torch.version.cuda if torch.cuda.is_available() else None
+    }
 
 @app.get("/api/models")
 async def get_available_models():
@@ -93,6 +146,39 @@ async def get_available_models():
         "transcript_formats": ["txt", "srt", "vtt", "json"]
     }
 
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    if not METRICS_AVAILABLE:
+        raise HTTPException(status_code=501, detail="Metrics not available. Install prometheus_client.")
+    
+    from fastapi.responses import Response
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+def validate_file(file: UploadFile) -> None:
+    """Validate uploaded file"""
+    # Check file extension
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {file_ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all requests with timing"""
+    start_time = time.time()
+    
+    response = await call_next(request)
+    
+    duration = time.time() - start_time
+    logger.info(
+        f"{request.method} {request.url.path} - Status: {response.status_code} - Duration: {duration:.2f}s"
+    )
+    
+    return response
+
 @app.post("/api/process")
 async def process_audio(
     file: UploadFile = File(...),
@@ -102,7 +188,30 @@ async def process_audio(
 ):
     """Process uploaded audio/video file"""
     
+    start_time = time.time()
+    
     try:
+        # Validate file
+        validate_file(file)
+        
+        # Check file size
+        file_size = 0
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        try:
+            chunk_size = 1024 * 1024  # 1MB chunks
+            while chunk := await file.read(chunk_size):
+                file_size += len(chunk)
+                if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum size: {MAX_FILE_SIZE_MB}MB"
+                    )
+                temp_file.write(chunk)
+        finally:
+            temp_file.close()
+        
+        logger.info(f"Processing file: {file.filename} ({file_size / 1024 / 1024:.2f}MB) with model: {whisper_model}")
+        
         # Create temporary directory
         temp_dir = tempfile.mkdtemp()
         

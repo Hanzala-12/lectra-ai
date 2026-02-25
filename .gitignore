@@ -53,3 +53,41 @@ temp/
 # OS
 .DS_Store
 Thumbs.db
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Pip cache (D: drive only)
+.pip_cache/
+
+# Monitoring & Logs
+*.log
+logs/
+mlruns/
+prometheus_data/
+grafana_data/
+
+# Environment & Config
+.env
+.env.local
+.env.*.local
+
+# Docker
+redis_data/
+
+# Node.js (Frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/build/
+
+# MLOps
+experiments/
+checkpoints/
+artifacts/
+.dvc/
+dvc.lock

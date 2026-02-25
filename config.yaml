@@ -25,9 +25,10 @@ diarization:
   max_speakers: 10
   
 asr:
-  model: "base"  # tiny, base, small, medium, large
+  model: "large"  # tiny (fastest), base, small, medium, large
   language: "en"  # auto-detect if null
-  compute_type: "float16"  # float16, int8, or float32
+  compute_type: "int8"  # int8 (fastest on CPU), float16, or float32
+  device: "cpu"  # cpu or cuda (auto-detect if not set)
   
 output:
   format: "wav"  # wav, mp3, flac
