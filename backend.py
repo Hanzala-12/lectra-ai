@@ -20,6 +20,10 @@ import time
 import hashlib
 import torch
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 try:
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST

@@ -19,7 +19,6 @@ function App() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [settings, setSettings] = useState({
-    whisperModel: 'base',
     enableDiarization: true,
     transcriptFormat: 'txt'
   })
@@ -38,7 +37,7 @@ function App() {
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('whisper_model', settings.whisperModel)
+    formData.append('whisper_model', 'large')  // Always use large model
     formData.append('enable_diarization', settings.enableDiarization)
     formData.append('transcript_format', settings.transcriptFormat)
 

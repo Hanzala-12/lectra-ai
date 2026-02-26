@@ -10,7 +10,10 @@ import numpy as np
 import soundfile as sf
 import librosa
 from pydub import AudioSegment
-from moviepy.editor import VideoFileClip
+try:
+    from moviepy.editor import VideoFileClip
+except ImportError:
+    VideoFileClip = None
 import logging
 
 logger = logging.getLogger(__name__)
@@ -70,6 +73,9 @@ class MediaLoader:
     
     def _extract_audio_from_video(self, video_path: str) -> Tuple[np.ndarray, int]:
         """Extract audio from video file"""
+        if VideoFileClip is None:
+            raise ImportError("moviepy is not installed. Install it with: pip install moviepy")
+        
         try:
             # Create temporary audio file
             temp_audio = "temp_extracted_audio.wav"

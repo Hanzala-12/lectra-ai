@@ -50,15 +50,22 @@ class SpeakerDiarization:
             os.environ['HF_HOME'] = str(models_dir)
             os.environ['TORCH_HOME'] = str(models_dir)
             
-            logger.info(f"Using models directory: {models_dir}")
+            # Get HuggingFace token from environment
+            hf_token = os.getenv('HF_TOKEN') or os.getenv('HUGGING_FACE_HUB_TOKEN')
             
-            # Load pretrained pipeline
-            # Note: Requires HuggingFace token for access
-            # Set environment variable: HUGGING_FACE_HUB_TOKEN
+            if not hf_token:
+                logger.error("HuggingFace token not found! Set HF_TOKEN in .env file")
+                logger.error("Get your token from: https://huggingface.co/settings/tokens")
+                self.pipeline = None
+                return
+            
+            logger.info(f"Using models directory: {models_dir}")
             logger.info("Loading speaker diarization model (downloads ~700MB on first use)...")
+            
+            # Load pretrained pipeline with token
             self.pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
-                use_auth_token=True,
+                use_auth_token=hf_token,
                 cache_dir=str(models_dir)
             )
             
