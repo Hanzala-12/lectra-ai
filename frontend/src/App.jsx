@@ -12,7 +12,6 @@ import AudiotrackIcon from '@mui/icons-material/Audiotrack'
 import FileUpload from './components/FileUpload'
 import Settings from './components/Settings'
 import Results from './components/Results'
-import ModelStatus from './components/ModelStatus'
 
 function App() {
   const [file, setFile] = useState(null)
@@ -20,6 +19,7 @@ function App() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [settings, setSettings] = useState({
+    whisperModel: 'large',
     enableDiarization: true,
     transcriptFormat: 'txt'
   })
@@ -38,7 +38,7 @@ function App() {
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('whisper_model', 'large')  // Always use large model
+    formData.append('whisper_model', settings.whisperModel || 'base')
     formData.append('enable_diarization', settings.enableDiarization)
     formData.append('transcript_format', settings.transcriptFormat)
 
@@ -48,7 +48,13 @@ function App() {
         body: formData
       })
 
-      const data = await response.json()
+      let data
+      const text = await response.text()
+      try {
+        data = JSON.parse(text)
+      } catch {
+        throw new Error(`Server returned invalid response (status ${response.status}). The server may have crashed or run out of memory. Check backend logs.`)
+      }
 
       if (data.success) {
         setResult(data)
@@ -56,7 +62,7 @@ function App() {
         setError(data.error || 'Processing failed')
       }
     } catch (err) {
-      setError('Failed to connect to server: ' + err.message)
+      setError(err.message)
     } finally {
       setProcessing(false)
     }
@@ -85,8 +91,6 @@ function App() {
         <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 4 }}>
           Remove background noise from audio and video files with advanced AI
         </Typography>
-
-        <ModelStatus />
 
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>

@@ -4,6 +4,7 @@ Orchestrates the complete processing workflow
 """
 
 import os
+import time
 import yaml
 import logging
 from pathlib import Path
@@ -118,6 +119,7 @@ class VoiceCleaningPipeline:
         # DeepFilterNet processor
         dfn_config = self.config['deepfilternet']
         self.deepfilter = DeepFilterProcessor(
+            double_pass=dfn_config.get('double_pass', False),
             model_name=dfn_config['model'],
             post_filter=dfn_config['post_filter']
         )
@@ -139,15 +141,11 @@ class VoiceCleaningPipeline:
         else:
             self.diarization = None
         
-        # ASR processor
-        asr_config = self.config['asr']
-        self.asr = ASRProcessor(
-            model_size=asr_config['model'],
-            language=asr_config.get('language'),
-            compute_type=asr_config['compute_type']
-        )
+        # ASR processor — deferred; backend.py sets pipeline.asr with the user-selected model.
+        # If running via CLI (clean_voice.py), it will be lazy-initialised on first call to process().
+        self.asr = None
         
-        logger.info("All components initialized successfully")
+        logger.info("All components initialized successfully (ASR will load on first use)")
     
     def process(self, 
                 input_path: str,
@@ -159,12 +157,18 @@ class VoiceCleaningPipeline:
         
         Pipeline: Pre-VAD trim -> DeepFilterNet speech chunks -> 
                   silent-bed transplant with 20ms fades -> 
-                  diarization + raw-ASR branch
-        import time
+                  diarize first -> ASR per-speaker segment (or full-pass if no diarization)
+
+        Args:
+            input_path: Path to input audio/video file
+            output_dir: Directory for output files
+            save_transcript: Whether to save transcript
+            transcript_format: Transcript format (txt, json, srt, vtt)
+            
+        Returns:
+            Dictionary with results and output paths
+        """
         start_time = time.time()
-        
-        logger.info(f"Starting voice cleaning pipeline for: {input_path}")
-        logger.info("=" * 70)
         
         # Check cache first
         if self.enable_cache and self.cache:
@@ -183,20 +187,20 @@ class VoiceCleaningPipeline:
                 import shutil
                 shutil.copy2(cached['audio_path'], output_audio)
                 
+                cached_result = cached['metadata'].get('result', {})
                 return {
-                    'audio_output_path': output_audio,
-                    'transcript': cached['metadata'].get('result', {}).get('transcript', {}),
+                    'input_path': input_path,
+                    'is_video': cached_result.get('is_video', False),
+                    'audio_output_path': str(output_audio),
+                    'video_output_path': cached_result.get('video_output_path'),
+                    'transcript': cached_result.get('transcript', {}),
+                    'diarization': cached_result.get('diarization', []),
+                    'duration_original': cached_result.get('duration_original', 0.0),
+                    'duration_processed': cached_result.get('duration_processed', 0.0),
+                    'speech_segments': cached_result.get('speech_segments', 0),
                     'processing_time': elapsed,
                     'from_cache': True
                 }
-            input_path: Path to input audio/video file
-            output_dir: Directory for output files
-            save_transcript: Whether to save transcript
-            transcript_format: Transcript format (txt, json, srt, vtt)
-            
-        Returns:
-            Dictionary with results and output paths
-        """
         logger.info(f"Starting voice cleaning pipeline for: {input_path}")
         logger.info("=" * 70)
         
@@ -216,17 +220,11 @@ class VoiceCleaningPipeline:
         trimmed_audio, speech_segments = self.vad_processor.trim_silence(audio)
         logger.info(f"Trimmed to {len(trimmed_audio)/sr:.2f}s with {len(speech_segments)} speech segments")
         
-        # Step 3: DeepFilterNet on speech chunks
+        # Step 3: DeepFilterNet on full audio in one continuous pass
+        # Processing the full stream (including silence) gives the model temporal context
+        # to accurately estimate the noise floor — far more effective than per-segment.
         logger.info("\nSTEP 3: DeepFilterNet processing on speech chunks")
-        if len(speech_segments) > 0:
-            enhanced_audio = self.deepfilter.process_segments(
-                trimmed_audio, 
-                sr, 
-                speech_segments
-            )
-        else:
-            logger.warning("No speech segments detected, processing full audio")
-            enhanced_audio = self.deepfilter.process_audio(trimmed_audio, sr)
+        enhanced_audio = self.deepfilter.process_audio(trimmed_audio, sr)
         
         # Step 4: Silent-bed transplant with 20ms fades
         logger.info("\nSTEP 4: Silent-bed transplant with 20ms crossfades")
@@ -258,7 +256,7 @@ class VoiceCleaningPipeline:
             bit_depth=bit_depth
         )
         
-        # Step 6: Diarization branch (parallel with ASR)
+        # Step 6: Speaker diarization FIRST — so ASR can be done per-speaker
         logger.info("\nSTEP 6: Speaker diarization")
         diarization_results = None
         if self.diarization is not None:
@@ -266,25 +264,92 @@ class VoiceCleaningPipeline:
                 diarization_results = self.diarization.diarize(str(audio_output_path))
                 if diarization_results:
                     stats = self.diarization.get_speaker_statistics(diarization_results)
-                    logger.info(f"Speaker statistics: {stats}")
+                    logger.info(f"Identified {len(stats)} speakers: {stats}")
             except Exception as e:
                 logger.warning(f"Diarization failed: {e}")
-        
-        # Step 7: Raw-ASR branch
+
+        # Step 7: Automatic speech recognition
         logger.info("\nSTEP 7: Automatic speech recognition")
-        transcript = self.asr.transcribe(str(audio_output_path))
-        logger.info(f"Transcribed: {len(transcript.get('text', ''))} characters")
-        
-        # Save transcript
-        if save_transcript:
-            transcript_path = output_dir / f"{input_name}_transcript.{transcript_format}"
-            self.asr.save_transcript(
-                transcript,
-                str(transcript_path),
-                format=transcript_format,
-                diarization=diarization_results
-            )
-            logger.info(f"Transcript saved to: {transcript_path}")
+        transcript = {'text': '', 'segments': []}
+
+        if self.config['asr'].get('skip', False):
+            logger.info("ASR skipped (asr.skip=true in config.yaml — set false to enable)")
+        else:
+            # Lazy-init ASR if not already set (CLI / non-backend usage)
+            if self.asr is None:
+                asr_config = self.config['asr']
+                logger.info(f"Lazy-initialising ASR with model '{asr_config['model']}' from config")
+                self.asr = ASRProcessor(
+                    model_size=asr_config['model'],
+                    language=asr_config.get('language'),
+                    compute_type=asr_config['compute_type']
+                )
+
+            if diarization_results:
+                # Best practice: transcribe each speaker slice separately so Whisper
+                # sees clean, single-speaker audio — no cross-talk confusion.
+                logger.info("Transcribing per speaker segment (diarization-guided)")
+                import soundfile as sf
+                import tempfile, shutil as _shutil
+
+                full_audio_arr, full_sr = sf.read(str(audio_output_path))
+                combined_segments = []
+                full_text_parts = []
+
+                for seg in diarization_results:
+                    start_s = seg.get('start', 0)
+                    end_s   = seg.get('end', 0)
+                    speaker = seg.get('speaker', 'SPEAKER_00')
+
+                    start_i = int(start_s * full_sr)
+                    end_i   = min(int(end_s * full_sr), len(full_audio_arr))
+                    slice_audio = full_audio_arr[start_i:end_i]
+
+                    if len(slice_audio) < full_sr * 0.2:   # skip < 200 ms clips
+                        continue
+
+                    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                        tmp_path = tmp.name
+                    try:
+                        sf.write(tmp_path, slice_audio, full_sr)
+                        seg_transcript = self.asr.transcribe(tmp_path)
+                        seg_text = seg_transcript.get('text', '').strip()
+                    finally:
+                        try:
+                            os.remove(tmp_path)
+                        except Exception:
+                            pass
+
+                    if seg_text:
+                        combined_segments.append({
+                            'start':   round(start_s, 2),
+                            'end':     round(end_s, 2),
+                            'speaker': speaker,
+                            'text':    seg_text,
+                        })
+                        full_text_parts.append(f"[{speaker}] {seg_text}")
+
+                transcript = {
+                    'text': '\n'.join(full_text_parts),
+                    'segments': combined_segments,
+                }
+                logger.info(f"Transcribed {len(combined_segments)} speaker segments")
+            else:
+                # No diarization available — single-pass full-audio transcription
+                logger.info("No diarization — transcribing full audio in one pass")
+                transcript = self.asr.transcribe(str(audio_output_path))
+                logger.info(f"Transcribed: {len(transcript.get('text', ''))} characters")
+
+            # Save transcript
+            if save_transcript:
+                transcript_path = output_dir / f"{input_name}_transcript.{transcript_format}"
+                self.asr.save_transcript(
+                    transcript,
+                    str(transcript_path),
+                    format=transcript_format,
+                    diarization=diarization_results
+                )
+                logger.info(f"Transcript saved to: {transcript_path}")
         
         # Step 8: Merge back to video if needed
         video_output_path = None

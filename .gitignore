@@ -35,6 +35,7 @@ models/
 # Data
 uploads/
 outputs/
+cache/
 temp/
 *.wav
 *.mp3

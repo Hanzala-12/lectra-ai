@@ -39,30 +39,78 @@ class SpeakerDiarization:
     def _load_model(self):
         """Load pyannote.audio pipeline"""
         try:
+            # ----------------------------------------------------------------
+            # Fix PyTorch 2.6+ weights_only=True default.  Pyannote checkpoints
+            # contain many custom classes (TorchVersion, Specifications, etc.)
+            # that are not in the safe-globals list.  Patching torch.load to
+            # always use weights_only=False is the only reliable approach.
+            # ----------------------------------------------------------------
+            import torch as _torch
+            import functools as _ft_load
+            _orig_torch_load = _torch.load
+            @_ft_load.wraps(_orig_torch_load)
+            def _patched_torch_load(*args, **kwargs):
+                kwargs['weights_only'] = False
+                return _orig_torch_load(*args, **kwargs)
+            _torch.load = _patched_torch_load
+
+            # ----------------------------------------------------------------
+            # Must patch BEFORE importing pyannote so its internal bindings
+            # pick up the patched version of hf_hub_download.
+            # ----------------------------------------------------------------
+            import huggingface_hub as _hfhub
+            import functools as _ft
+
+            _orig_download = _hfhub.hf_hub_download
+            @_ft.wraps(_orig_download)
+            def _patched_download(*args, **kwargs):
+                if 'use_auth_token' in kwargs:
+                    kwargs.setdefault('token', kwargs.pop('use_auth_token'))
+                return _orig_download(*args, **kwargs)
+            _hfhub.hf_hub_download = _patched_download
+
+            _orig_snapshot = _hfhub.snapshot_download
+            @_ft.wraps(_orig_snapshot)
+            def _patched_snapshot(*args, **kwargs):
+                if 'use_auth_token' in kwargs:
+                    kwargs.setdefault('token', kwargs.pop('use_auth_token'))
+                return _orig_snapshot(*args, **kwargs)
+            _hfhub.snapshot_download = _patched_snapshot
+
+            # Also patch inside any already-imported pyannote modules
+            import sys
+            for mod_name, mod in list(sys.modules.items()):
+                if 'pyannote' in mod_name and hasattr(mod, 'hf_hub_download'):
+                    mod.hf_hub_download = _patched_download
+                if 'pyannote' in mod_name and hasattr(mod, 'snapshot_download'):
+                    mod.snapshot_download = _patched_snapshot
+            # ----------------------------------------------------------------
+
             from pyannote.audio import Pipeline
-            
+
             # Set local models directory
             project_root = Path(__file__).parent.parent
             models_dir = project_root / "models" / "pyannote"
             models_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Set HuggingFace cache to local directory
             os.environ['HF_HOME'] = str(models_dir)
             os.environ['TORCH_HOME'] = str(models_dir)
-            
+
             # Get HuggingFace token from environment
             hf_token = os.getenv('HF_TOKEN') or os.getenv('HUGGING_FACE_HUB_TOKEN')
-            
+
             if not hf_token:
                 logger.error("HuggingFace token not found! Set HF_TOKEN in .env file")
-                logger.error("Get your token from: https://huggingface.co/settings/tokens")
                 self.pipeline = None
                 return
-            
+
+            os.environ['HUGGING_FACE_HUB_TOKEN'] = hf_token
+            os.environ['HF_TOKEN'] = hf_token
+
             logger.info(f"Using models directory: {models_dir}")
             logger.info("Loading speaker diarization model (downloads ~700MB on first use)...")
-            
-            # Load pretrained pipeline with token
+
             self.pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
                 use_auth_token=hf_token,
@@ -93,9 +141,18 @@ class SpeakerDiarization:
             return []
         
         try:
+            # Load audio as a waveform tensor to bypass torchcodec/FFmpeg.
+            # Pyannote accepts {"waveform": Tensor[C,T], "sample_rate": int}.
+            import soundfile as sf
+            import numpy as np
+            audio_np, sr = sf.read(audio_path, dtype='float32', always_2d=True)
+            # soundfile returns (T, C) — pyannote expects (C, T)
+            waveform = torch.from_numpy(audio_np.T)
+            audio_input = {"waveform": waveform, "sample_rate": sr}
+
             # Run diarization
             diarization = self.pipeline(
-                audio_path,
+                audio_input,
                 min_speakers=self.min_speakers,
                 max_speakers=self.max_speakers
             )

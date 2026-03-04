@@ -2,7 +2,7 @@
 FastAPI Backend Server for Voice Cleaning Pipeline
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, validator
@@ -12,12 +12,9 @@ import os
 import sys
 import tempfile
 import shutil
-import json
 from pathlib import Path
-import asyncio
 import logging
 import time
-import hashlib
 import torch
 from datetime import datetime
 from dotenv import load_dotenv
@@ -25,13 +22,19 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Add bundled ffmpeg to PATH so pydub can find it
+try:
+    import imageio_ffmpeg
+    _ffmpeg_dir = str(Path(imageio_ffmpeg.get_ffmpeg_exe()).parent)
+    os.environ["PATH"] = _ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+except Exception:
+    pass
+
 try:
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
     METRICS_AVAILABLE = True
 except ImportError:
     METRICS_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("prometheus_client not installed. Metrics endpoint disabled.")
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -62,14 +65,13 @@ app.add_middleware(
 
 # Global pipeline instance
 pipeline = None
-processing_status = {}
 
 # Configuration
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "500"))
 ALLOWED_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.flac', '.aac', '.ogg', '.mp4', '.avi', '.mkv', '.mov', '.webm'}
 
 class ProcessingConfig(BaseModel):
-    whisper_model: str = "base"
+    whisper_model: str = "large"
     enable_diarization: bool = True
     transcript_format: str = "txt"
     
@@ -92,23 +94,23 @@ def initialize_pipeline(config: ProcessingConfig):
     global pipeline
     
     if pipeline is None:
-        pipeline = VoiceCleaningPipeline("config.yaml", enable_cache=True)  # Enable caching
-    
-    # Update configuration
-    pipeline.config['asr']['model'] = config.whisper_model
-    pipeline.config['asr']['device'] = 'cpu'  # Force CPU for laptops
-    pipeline.config['asr']['compute_type'] = 'int8'  # Use int8 for CPU optimization
+        pipeline = VoiceCleaningPipeline("config.yaml", enable_cache=True)
+
+    # Skip ASR initialisation entirely when asr.skip is true
+    asr_skip = pipeline.config.get('asr', {}).get('skip', False)
+    if not asr_skip:
+        current_model = pipeline.asr.model_size if pipeline.asr is not None else None
+        if current_model != config.whisper_model:
+            logger.info(f"Loading Whisper '{config.whisper_model}' (was '{current_model}')")
+            from asr_processor import ASRProcessor
+            pipeline.asr = ASRProcessor(
+                model_size=config.whisper_model,
+                language=pipeline.config['asr'].get('language'),
+                device='cpu',
+                compute_type='int8'
+            )
+
     pipeline.config['diarization']['enabled'] = config.enable_diarization
-    
-    # Reinitialize ASR if model changed
-    from asr_processor import ASRProcessor
-    pipeline.asr = ASRProcessor(
-        model_size=config.whisper_model,
-        language=pipeline.config['asr'].get('language'),
-        device='cpu',  # Force CPU
-        compute_type='int8'  # Optimize for CPU
-    )
-    
     if not config.enable_diarization:
         pipeline.diarization = None
     
@@ -142,10 +144,10 @@ async def get_available_models():
     return {
         "whisper_models": [
             {"value": "tiny", "label": "Tiny (39MB) - Fastest", "size": "39MB"},
-            {"value": "base", "label": "Base (74MB) - Recommended", "size": "74MB"},
+            {"value": "base", "label": "Base (74MB) - Fast", "size": "74MB"},
             {"value": "small", "label": "Small (244MB) - Good", "size": "244MB"},
             {"value": "medium", "label": "Medium (769MB) - Better", "size": "769MB"},
-            {"value": "large", "label": "Large (1.5GB) - Best", "size": "1.5GB"}
+            {"value": "large", "label": "Large (1.5GB) - Best (Recommended)", "size": "1.5GB"}
         ],
         "transcript_formats": ["txt", "srt", "vtt", "json"]
     }
@@ -262,11 +264,12 @@ async def process_audio(
         # Validate file
         validate_file(file)
         
-        # Check file size
+        # Read file once, check size, save to temp path
         file_size = 0
-        temp_file = tempfile.NamedTemporaryFile(delete=False)
-        try:
-            chunk_size = 1024 * 1024  # 1MB chunks
+        temp_dir = tempfile.mkdtemp()
+        input_path = os.path.join(temp_dir, file.filename)
+        chunk_size = 1024 * 1024  # 1MB chunks
+        with open(input_path, "wb") as out_f:
             while chunk := await file.read(chunk_size):
                 file_size += len(chunk)
                 if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
@@ -274,20 +277,9 @@ async def process_audio(
                         status_code=413,
                         detail=f"File too large. Maximum size: {MAX_FILE_SIZE_MB}MB"
                     )
-                temp_file.write(chunk)
-        finally:
-            temp_file.close()
+                out_f.write(chunk)
         
         logger.info(f"Processing file: {file.filename} ({file_size / 1024 / 1024:.2f}MB) with model: {whisper_model}")
-        
-        # Create temporary directory
-        temp_dir = tempfile.mkdtemp()
-        
-        # Save uploaded file
-        input_path = os.path.join(temp_dir, file.filename)
-        with open(input_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
         
         # Initialize pipeline
         config = ProcessingConfig(
@@ -316,7 +308,13 @@ async def process_audio(
         # Save to outputs folder
         final_output_dir = os.path.join(os.path.dirname(__file__), "outputs")
         os.makedirs(final_output_dir, exist_ok=True)
-        
+
+        # Save original audio (before cleaning) so the frontend can compare
+        original_ext = Path(file.filename).suffix.lower() or '.wav'
+        original_filename = f"original_{Path(file.filename).stem}{original_ext}"
+        final_original_path = os.path.join(final_output_dir, original_filename)
+        shutil.copy2(input_path, final_original_path)
+
         output_filename = f"cleaned_{Path(file.filename).stem}.wav"
         final_audio_path = os.path.join(final_output_dir, output_filename)
         
@@ -324,20 +322,67 @@ async def process_audio(
             f.write(audio_data)
         
         # Read transcript if available
-        transcript_text = result['transcript'].get('text', '')
-        
+        transcript_data = result.get('transcript', {})
+        transcript_text = transcript_data.get('text', '') if isinstance(transcript_data, dict) else str(transcript_data)
+        transcript_segments = transcript_data.get('segments', []) if isinstance(transcript_data, dict) else []
+
+        # Save transcript txt file to outputs folder
+        transcript_filename = f"transcript_{Path(file.filename).stem}.txt"
+        final_transcript_path = os.path.join(final_output_dir, transcript_filename)
+        with open(final_transcript_path, 'w', encoding='utf-8') as f:
+            f.write(transcript_text)
+
+        # Generate per-speaker audio clips when diarization succeeded
+        diarization_data = result.get('diarization', [])
+        speaker_audio_urls = {}
+        if diarization_data:
+            try:
+                import soundfile as sf
+                import numpy as np
+                cleaned_audio, sr = sf.read(final_audio_path)
+                speakers = list({seg['speaker'] for seg in diarization_data if 'speaker' in seg})
+                for spk in speakers:
+                    segs = [s for s in diarization_data if s.get('speaker') == spk]
+                    chunks = []
+                    for s in segs:
+                        s_start = int(s['start'] * sr)
+                        s_end = int(s['end'] * sr)
+                        if s_end > s_start:
+                            chunks.append(cleaned_audio[s_start:s_end])
+                    if chunks:
+                        spk_audio = np.concatenate(chunks)
+                        safe_spk = spk.replace(' ', '_').replace('/', '_')
+                        spk_filename = f"speaker_{safe_spk}_{Path(file.filename).stem}.wav"
+                        spk_path = os.path.join(final_output_dir, spk_filename)
+                        sf.write(spk_path, spk_audio, sr)
+                        speaker_audio_urls[spk] = f"/api/download/{spk_filename}"
+            except Exception as spk_err:
+                logger.warning(f"Could not generate speaker audio: {spk_err}")
+
         # Cleanup temp directory
         shutil.rmtree(temp_dir)
-        
+
         return {
             "success": True,
+            "original_audio_url": f"/api/download/{original_filename}",
             "audio_url": f"/api/download/{output_filename}",
             "transcript": transcript_text,
-            "duration_original": result['duration_original'],
-            "duration_processed": result['duration_processed'],
-            "speech_segments": result['speech_segments'],
-            "is_video": result['is_video'],
-            "diarization": result.get('diarization', [])
+            "transcript_url": f"/api/download/{transcript_filename}",
+            "transcript_segments": [
+                {
+                    "start": round(s.get("start", 0), 2),
+                    "end": round(s.get("end", 0), 2),
+                    "text": s.get("text", "").strip(),
+                    "speaker": s.get("speaker", None)
+                }
+                for s in transcript_segments
+            ],
+            "duration_original": result.get('duration_original', 0.0),
+            "duration_processed": result.get('duration_processed', 0.0),
+            "speech_segments": result.get('speech_segments', 0),
+            "is_video": result.get('is_video', False),
+            "diarization": diarization_data,
+            "speaker_audio": speaker_audio_urls
         }
         
     except Exception as e:
@@ -354,42 +399,27 @@ async def download_file(filename: str):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     
+    suffix = Path(filename).suffix.lower()
+    media_type_map = {
+        ".wav": "audio/wav",
+        ".mp3": "audio/mpeg",
+        ".ogg": "audio/ogg",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".flac": "audio/flac",
+        ".txt": "text/plain; charset=utf-8",
+        ".srt": "text/plain; charset=utf-8",
+        ".vtt": "text/vtt",
+        ".json": "application/json",
+        ".mp4": "video/mp4",
+    }
+    media_type = media_type_map.get(suffix, "application/octet-stream")
+    
     return FileResponse(
         path=file_path,
-        media_type="audio/wav",
+        media_type=media_type,
         filename=filename
     )
-
-@app.websocket("/ws/process")
-async def websocket_process(websocket: WebSocket):
-    """WebSocket endpoint for real-time processing updates"""
-    await websocket.accept()
-    
-    try:
-        # Receive configuration
-        config_data = await websocket.receive_text()
-        config = json.loads(config_data)
-        
-        # Send status updates during processing
-        await websocket.send_json({"status": "initialized", "progress": 0})
-        await websocket.send_json({"status": "loading_models", "progress": 10})
-        
-        # Initialize pipeline
-        pipe_config = ProcessingConfig(**config)
-        pipe = initialize_pipeline(pipe_config)
-        
-        await websocket.send_json({"status": "models_loaded", "progress": 20})
-        
-        # Wait for file data
-        # (This is simplified - in production you'd handle file upload via WS)
-        
-        await websocket.send_json({"status": "processing", "progress": 50})
-        await websocket.send_json({"status": "completed", "progress": 100})
-        
-    except WebSocketDisconnect:
-        print("WebSocket disconnected")
-    except Exception as e:
-        await websocket.send_json({"status": "error", "message": str(e)})
 
 if __name__ == "__main__":
     print("🚀 Starting Voice Cleaning API Server...")

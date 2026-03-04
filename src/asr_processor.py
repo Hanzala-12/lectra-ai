@@ -53,12 +53,22 @@ class ASRProcessor:
             os.makedirs(models_dir, exist_ok=True)
             
             logger.info(f"Loading Whisper {self.model_size} model to {models_dir}")
-            
-            self.model = whisper.load_model(
-                self.model_size,
-                device=self.device,
-                download_root=models_dir
-            )
+
+            try:
+                self.model = whisper.load_model(
+                    self.model_size,
+                    device=self.device,
+                    download_root=models_dir
+                )
+            except (MemoryError, RuntimeError) as mem_err:
+                logger.warning(f"Whisper {self.model_size} failed (likely OOM): {mem_err}")
+                logger.warning("Falling back to Whisper base model")
+                self.model_size = 'base'
+                self.model = whisper.load_model(
+                    'base',
+                    device=self.device,
+                    download_root=models_dir
+                )
             
             # Apply CPU optimizations
             if self.device == 'cpu':
@@ -95,8 +105,13 @@ class ASRProcessor:
             Transcription result dictionary
         """
         try:
+            # Load audio with librosa (avoids ffmpeg dependency)
+            import librosa
+            audio_array, _ = librosa.load(audio_path, sr=16000, mono=True)
+            audio_array = audio_array.astype(np.float32)
+
             result = self.model.transcribe(
-                audio_path,
+                audio_array,
                 language=self.language,
                 word_timestamps=word_timestamps,
                 verbose=False

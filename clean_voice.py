@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from pipeline import VoiceCleaningPipeline
-from utils import get_audio_files, create_directories
+from utils import get_audio_files
 
 def main():
     parser = argparse.ArgumentParser(
@@ -128,7 +128,7 @@ Examples:
         logging.basicConfig(level=logging.DEBUG)
     
     # Create output directory
-    create_directories(os.path.dirname(os.path.abspath(__file__)))
+    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Initialize pipeline

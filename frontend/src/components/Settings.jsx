@@ -26,6 +26,23 @@ export default function Settings({ settings, onSettingsChange }) {
       </Typography>
 
       <Grid container spacing={3} sx={{ mt: 1 }}>
+        {/* Whisper Model */}
+        <Grid item xs={12} md={6}>
+          <FormControl fullWidth>
+            <InputLabel>Whisper Model</InputLabel>
+            <Select
+              value={settings.whisperModel}
+              label="Whisper Model"
+              onChange={handleChange('whisperModel')}
+            >
+              <MenuItem value="base">Base (74 MB) — Fast</MenuItem>
+              <MenuItem value="small">Small (244 MB) — Better</MenuItem>
+              <MenuItem value="medium">Medium (769 MB) — Good</MenuItem>
+              <MenuItem value="large">Large (1.5 GB) — Best accuracy (slow)</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+
         {/* Transcript Format */}
         <Grid item xs={12} md={6}>
           <FormControl fullWidth>
@@ -67,8 +84,8 @@ export default function Settings({ settings, onSettingsChange }) {
 
       <Box sx={{ mt: 2, p: 2, backgroundColor: 'info.lighter', borderRadius: 1 }}>
         <Typography variant="caption" color="text.secondary">
-          💡 <strong>Tip:</strong> Using Whisper Large model (best accuracy) optimized for CPU with int8 quantization. 
-          Enable diarization if you need to identify different speakers.
+          💡 <strong>Tip:</strong> Use <strong>Base</strong> for fast results, <strong>Large</strong> for best accuracy (needs ~3 GB RAM, takes longer).
+          Enable diarization to identify different speakers (Teacher / Student etc).
         </Typography>
       </Box>
     </Box>
