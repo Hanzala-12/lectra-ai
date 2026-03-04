@@ -111,10 +111,18 @@ class SpeakerDiarization:
             logger.info(f"Using models directory: {models_dir}")
             logger.info("Loading speaker diarization model (downloads ~700MB on first use)...")
 
+            # Use local_files_only if the snapshot is already downloaded — skips
+            # 5 HuggingFace HEAD requests (~6s of network overhead) on every load
+            _snapshot_dir = models_dir / "models--pyannote--speaker-diarization-3.1" / "snapshots"
+            _local_only = _snapshot_dir.exists() and any(_snapshot_dir.iterdir())
+            if _local_only:
+                logger.info("Models found locally — loading offline (no HuggingFace network calls)")
+
             self.pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
                 use_auth_token=hf_token,
-                cache_dir=str(models_dir)
+                cache_dir=str(models_dir),
+                local_files_only=_local_only
             )
             
             self.pipeline.to(torch.device(self.device))

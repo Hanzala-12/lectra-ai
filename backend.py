@@ -66,6 +66,18 @@ app.add_middleware(
 # Global pipeline instance
 pipeline = None
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Pre-warm the pipeline at server startup so the first user request is instant."""
+    logger.info("Server startup: pre-warming pipeline (loading models into memory)...")
+    try:
+        config = ProcessingConfig()
+        initialize_pipeline(config)
+        logger.info("Pipeline pre-warmed successfully — ready to process requests")
+    except Exception as e:
+        logger.error(f"Pipeline pre-warm failed: {e} — will retry on first request")
+
 # Configuration
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "500"))
 ALLOWED_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.flac', '.aac', '.ogg', '.mp4', '.avi', '.mkv', '.mov', '.webm'}
