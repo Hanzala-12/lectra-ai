@@ -150,6 +150,70 @@ async def get_available_models():
         "transcript_formats": ["txt", "srt", "vtt", "json"]
     }
 
+@app.get("/api/model-status")
+async def get_model_status():
+    """Check download status of all required models"""
+    models_dir = Path("./models")
+    
+    # Whisper large-v3.pt - expected ~2.88 GB
+    WHISPER_EXPECTED = 3_091_500_032  # bytes
+    whisper_path = models_dir / "large-v3.pt"
+    if whisper_path.exists():
+        whisper_size = whisper_path.stat().st_size
+        whisper_pct = min(100, round(whisper_size / WHISPER_EXPECTED * 100, 1))
+        whisper_ready = whisper_size >= WHISPER_EXPECTED * 0.99
+    else:
+        whisper_size = 0
+        whisper_pct = 0
+        whisper_ready = False
+
+    # DeepFilterNet3 - auto-downloaded to venv cache
+    deepfilter_ready = False
+    try:
+        from df.enhance import init_df
+        deepfilter_ready = True
+    except Exception:
+        deepfilter_ready = False
+
+    # Pyannote diarization model
+    pyannote_dir = models_dir / "pyannote"
+    PYANNOTE_EXPECTED = 300_000_000  # ~300 MB minimum
+    pyannote_size = sum(f.stat().st_size for f in pyannote_dir.rglob("*") if f.is_file()) if pyannote_dir.exists() else 0
+    pyannote_ready = pyannote_size >= PYANNOTE_EXPECTED
+
+    def fmt_mb(b):
+        return f"{round(b / 1024 / 1024, 1)} MB"
+
+    return {
+        "models": {
+            "whisper": {
+                "name": "Whisper Large v3",
+                "description": "Speech recognition (2.88 GB)",
+                "ready": whisper_ready,
+                "progress": whisper_pct,
+                "downloaded": fmt_mb(whisper_size),
+                "total": fmt_mb(WHISPER_EXPECTED)
+            },
+            "deepfilternet": {
+                "name": "DeepFilterNet3",
+                "description": "Noise reduction (~50 MB)",
+                "ready": deepfilter_ready,
+                "progress": 100 if deepfilter_ready else 0,
+                "downloaded": "~50 MB" if deepfilter_ready else "0 MB",
+                "total": "~50 MB"
+            },
+            "pyannote": {
+                "name": "Pyannote Diarization 3.1",
+                "description": "Speaker detection (~700 MB)",
+                "ready": pyannote_ready,
+                "progress": min(100, round(pyannote_size / PYANNOTE_EXPECTED * 100, 1)),
+                "downloaded": fmt_mb(pyannote_size),
+                "total": "~700 MB"
+            }
+        },
+        "all_ready": whisper_ready and deepfilter_ready
+    }
+
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint"""

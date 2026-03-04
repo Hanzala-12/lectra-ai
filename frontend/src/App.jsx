@@ -12,6 +12,7 @@ import AudiotrackIcon from '@mui/icons-material/Audiotrack'
 import FileUpload from './components/FileUpload'
 import Settings from './components/Settings'
 import Results from './components/Results'
+import ModelStatus from './components/ModelStatus'
 
 function App() {
   const [file, setFile] = useState(null)
@@ -84,6 +85,8 @@ function App() {
         <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 4 }}>
           Remove background noise from audio and video files with advanced AI
         </Typography>
+
+        <ModelStatus />
 
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
