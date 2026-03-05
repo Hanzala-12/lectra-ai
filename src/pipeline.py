@@ -220,30 +220,60 @@ class VoiceCleaningPipeline:
         trimmed_audio, speech_segments = self.vad_processor.trim_silence(audio)
         logger.info(f"Trimmed to {len(trimmed_audio)/sr:.2f}s with {len(speech_segments)} speech segments")
         
-        # Step 3: DeepFilterNet on full audio in one continuous pass
-        # Processing the full stream (including silence) gives the model temporal context
-        # to accurately estimate the noise floor — far more effective than per-segment.
-        logger.info("\nSTEP 3: DeepFilterNet processing on speech chunks")
+        # Step 3: DIARIZATION FIRST - identify exact voice segments
+        logger.info("\nSTEP 3: Speaker diarization (identifying voice-only segments)")
+        
+        # Save temporary file for diarization
+        temp_audio_path = output_dir / f"{input_name}_temp.wav"
+        import soundfile as sf
+        sf.write(str(temp_audio_path), trimmed_audio, sr)
+        
+        diarization_results = []
+        if self.diarization is not None:
+            try:
+                diarization_results = self.diarization.diarize(str(temp_audio_path))
+                if diarization_results:
+                    stats = self.diarization.get_speaker_statistics(diarization_results)
+                    logger.info(f"Identified {len(stats)} speakers: {stats}")
+                    logger.info(f"Found {len(diarization_results)} voice segments")
+            except Exception as e:
+                logger.warning(f"Diarization failed: {e}")
+        
+        # Step 4: VOICE ISOLATION - Extract voice segments and place on SILENT track
+        logger.info("\nSTEP 4: Voice isolation (extracting speech, removing ALL background)")
+        
+        if diarization_results and len(diarization_results) > 0:
+            # Create silent track
+            isolated_audio = np.zeros_like(trimmed_audio)
+            
+            total_voice_duration = 0
+            for seg in diarization_results:
+                start_sample = int(seg['start'] * sr)
+                end_sample = int(seg['end'] * sr)
+                start_sample = max(0, start_sample)
+                end_sample = min(len(trimmed_audio), end_sample)
+                
+                # Copy ONLY voice segments to silent track
+                isolated_audio[start_sample:end_sample] = trimmed_audio[start_sample:end_sample]
+                total_voice_duration += (end_sample - start_sample) / sr
+            
+            logger.info(f"Extracted {total_voice_duration:.2f}s of pure voice (background completely removed)")
+            trimmed_audio = isolated_audio  # Replace with voice-only track
+        else:
+            logger.warning("No diarization results - processing with background noise present")
+        
+        # Step 5: DeepFilterNet on ISOLATED voice (no background noise to fight!)
+        logger.info("\nSTEP 5: DeepFilterNet AI enhancement (cleaning isolated voice)")
         enhanced_audio = self.deepfilter.process_audio(trimmed_audio, sr)
         
-        # Step 4: Silent-bed transplant with 20ms fades
-        logger.info("\nSTEP 4: Silent-bed transplant with 20ms crossfades")
-        if len(speech_segments) > 0:
-            final_audio = self.silent_bed.smart_transplant(
-                trimmed_audio,
-                enhanced_audio,
-                speech_segments
-            )
-        else:
-            final_audio = enhanced_audio
-        
         # Normalize audio
+        final_audio = enhanced_audio
         max_val = np.abs(final_audio).max()
         if max_val > 0:
             final_audio = final_audio / max_val * 0.95
         
-        # Step 5: Save cleaned audio
-        logger.info("\nSTEP 5: Saving cleaned audio")
+        # Step 6: Save cleaned audio
+        logger.info("\nSTEP 6: Saving cleaned audio")
         output_format = self.config['output']['format']
         bit_depth = self.config['output']['bit_depth']
         
@@ -256,66 +286,10 @@ class VoiceCleaningPipeline:
             bit_depth=bit_depth
         )
         
-        # Step 6: Speaker diarization FIRST — so ASR can be done per-speaker
-        logger.info("\nSTEP 6: Speaker diarization")
-        diarization_results = None
-        if self.diarization is not None:
-            try:
-                diarization_results = self.diarization.diarize(str(audio_output_path))
-                if diarization_results:
-                    stats = self.diarization.get_speaker_statistics(diarization_results)
-                    logger.info(f"Identified {len(stats)} speakers: {stats}")
-            except Exception as e:
-                logger.warning(f"Diarization failed: {e}")
-
-        # Step 6.5: Post-diarization spectral cleanup
-        # Now that diarization tells us EXACTLY when speakers are active, we can
-        # extract the pure-silence gaps as a noise fingerprint for THIS recording
-        # and subtract that pattern from the full audio. Fast: pure NumPy/SciPy math.
-        logger.info("\nSTEP 6.5: Post-diarization spectral noise profiling")
-        if diarization_results and len(diarization_results) > 0:
-            try:
-                import noisereduce as nr
-                import soundfile as _sf2
-
-                _audio_arr, _sr = _sf2.read(str(audio_output_path), dtype='float32')
-                total_samples = len(_audio_arr)
-
-                # Build a mask of all samples that ARE speech
-                speech_mask = np.zeros(total_samples, dtype=bool)
-                for _seg in diarization_results:
-                    _s = max(0, int(_seg['start'] * _sr))
-                    _e = min(total_samples, int(_seg['end'] * _sr))
-                    speech_mask[_s:_e] = True
-
-                # Everything outside speech = noise profile
-                noise_samples = _audio_arr[~speech_mask]
-                min_noise_ms = 150
-                if len(noise_samples) >= int(_sr * min_noise_ms / 1000):
-                    logger.info(f"Noise profile: {len(noise_samples)/_sr:.2f}s of silence gaps from diarization")
-                    _cleaned = nr.reduce_noise(
-                        y=_audio_arr,
-                        sr=_sr,
-                        y_noise=noise_samples,
-                        stationary=False,   # adapt to changing noise (non-stationary)
-                        prop_decrease=1.0,  # full suppression of profiled noise
-                        n_fft=1024,
-                        n_jobs=1
-                    )
-                    # Re-normalise to 0.95 peak to avoid clipping
-                    _peak = np.abs(_cleaned).max()
-                    if _peak > 0:
-                        _cleaned = _cleaned / _peak * 0.95
-                    _sf2.write(str(audio_output_path), _cleaned, _sr)
-                    final_audio = _cleaned  # keep in-memory array in sync
-                    logger.info("Post-diarization spectral cleanup applied — residual noise removed")
-                else:
-                    logger.info(f"Skipped: only {len(noise_samples)/_sr*1000:.0f}ms of silence found (need {min_noise_ms}ms+)")
-            except Exception as _e:
-                logger.warning(f"Post-diarization spectral cleanup failed (non-fatal): {_e}")
-        else:
-            logger.info("Skipped: no diarization results available")
-
+        # Clean up temp file
+        if temp_audio_path.exists():
+            temp_audio_path.unlink()
+        
         # Step 7: Automatic speech recognition
         logger.info("\nSTEP 7: Automatic speech recognition")
         transcript = {'text': '', 'segments': []}

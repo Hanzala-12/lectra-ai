@@ -121,8 +121,7 @@ class SpeakerDiarization:
             self.pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
                 use_auth_token=hf_token,
-                cache_dir=str(models_dir),
-                local_files_only=_local_only
+                cache_dir=str(models_dir)
             )
             
             self.pipeline.to(torch.device(self.device))

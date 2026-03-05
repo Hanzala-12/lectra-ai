@@ -14,7 +14,7 @@ vad:
 deepfilternet:
   model: "DeepFilterNet3"  # DeepFilterNet2 or DeepFilterNet3
   post_filter: true  # additional post-processing
-  double_pass: false  # set true to run enhancement twice (catches residual noise, costs ~2x DeepFilter time)
+  double_pass: false  # DISABLED - using silence isolation instead
   
 silent_bed:
   fade_duration_ms: 20  # crossfade duration for transplant
@@ -31,6 +31,9 @@ asr:
   language: "en"  # auto-detect if null
   compute_type: "int8"  # int8 (fastest on CPU), float16, or float32
   device: "cpu"  # cpu or cuda (auto-detect if not set)
+  
+cache:
+  enabled: false  # DISABLED for testing new voice isolation architecture
   
 output:
   format: "wav"  # wav, mp3, flac
