@@ -10,11 +10,11 @@ from .asr_processor import ASRProcessor
 
 __version__ = "1.0.0"
 __all__ = [
-    'VoiceCleaningPipeline',
-    'MediaLoader',
-    'VADProcessor',
-    'DeepFilterProcessor',
-    'SilentBedTransplant',
-    'SpeakerDiarization',
-    'ASRProcessor',
+    "VoiceCleaningPipeline",
+    "MediaLoader",
+    "VADProcessor",
+    "DeepFilterProcessor",
+    "SilentBedTransplant",
+    "SpeakerDiarization",
+    "ASRProcessor",
 ]
