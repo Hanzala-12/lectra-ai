@@ -26,8 +26,8 @@ diarization:
   max_speakers: 10
   
 asr:
-  skip: true   # set false to enable transcription
-  model: "large"  # tiny, base, small, medium, large
+  skip: false   # set false to enable transcription
+  model: "turbo"  # tiny, base, small, medium, large, large-v3, turbo (recommended)
   language: "en"  # auto-detect if null
   compute_type: "int8"  # int8 (fastest on CPU), float16, or float32
   device: "cpu"  # cpu or cuda (auto-detect if not set)

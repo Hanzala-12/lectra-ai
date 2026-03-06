@@ -14,7 +14,7 @@ This project combines state-of-the-art deep learning models with custom algorith
 
 - 🎯 **State-of-Art Noise Removal**: DeepFilterNet3 deep learning model
 - 🗣️ **Speaker Diarization**: Automatic speaker identification using Pyannote
-- 📝 **Speech Recognition**: Whisper large-v3 model for transcription
+- 📝 **Speech Recognition**: faster-whisper turbo model for transcription
 - 🧮 **Custom DSP Algorithms**: 2,950+ lines of hand-written signal processing code
 - ⚡ **Performance Optimized**: 64x speedup on CPU-intensive operations
 - 🌐 **Web Interface**: React frontend + FastAPI backend
@@ -367,7 +367,7 @@ tests/test_api.py ..................... [100%]
 | **Backend** | FastAPI | REST API server |
 | **Frontend** | React 18 | Web interface |
 | **Noise Removal** | DeepFilterNet3 | Deep learning noise reduction |
-| **Speech Recognition** | Whisper Large-v3 | Transcription |
+| **Speech Recognition** | faster-whisper Turbo | Transcription |
 | **Speaker Diarization** | Pyannote 3.1 | Speaker identification |
 | **DSP** | NumPy, SciPy | Signal processing |
 | **Optimization** | Numba | JIT compilation |
@@ -392,7 +392,7 @@ models:
     device: "auto"  # auto/cpu/cuda
   
   whisper:
-    model: "large-v3"
+    model: "turbo"  # turbo (recommended), large-v3, large, medium, small, base, tiny
     language: "en"
   
   pyannote:
@@ -463,6 +463,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - **DeepFilterNet**: Schröter et al. for the excellent noise removal model
+- **faster-whisper**: Systran for the optimized Whisper implementation using CTranslate2
 - **Whisper**: OpenAI for the robust speech recognition model
 - **Pyannote**: Hervé Bredin for the speaker diarization toolkit
 - **NumPy/SciPy**: Community for foundational numerical computing libraries

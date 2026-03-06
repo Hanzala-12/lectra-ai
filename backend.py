@@ -83,13 +83,13 @@ MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "500"))
 ALLOWED_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.flac', '.aac', '.ogg', '.mp4', '.avi', '.mkv', '.mov', '.webm'}
 
 class ProcessingConfig(BaseModel):
-    whisper_model: str = "large"
+    whisper_model: str = "turbo"
     enable_diarization: bool = True
     transcript_format: str = "txt"
     
     @validator('whisper_model')
     def validate_model(cls, v):
-        allowed = ['tiny', 'base', 'small', 'medium', 'large']
+        allowed = ['tiny', 'base', 'small', 'medium', 'large', 'large-v3', 'turbo']
         if v not in allowed:
             raise ValueError(f"Model must be one of {allowed}")
         return v
@@ -113,7 +113,7 @@ def initialize_pipeline(config: ProcessingConfig):
     if not asr_skip:
         current_model = pipeline.asr.model_size if pipeline.asr is not None else None
         if current_model != config.whisper_model:
-            logger.info(f"Loading Whisper '{config.whisper_model}' (was '{current_model}')")
+            logger.info(f"Loading faster-whisper '{config.whisper_model}' (was '{current_model}')")
             from asr_processor import ASRProcessor
             pipeline.asr = ASRProcessor(
                 model_size=config.whisper_model,
@@ -152,14 +152,16 @@ async def health_check():
 
 @app.get("/api/models")
 async def get_available_models():
-    """Get available Whisper models"""
+    """Get available faster-whisper models"""
     return {
         "whisper_models": [
             {"value": "tiny", "label": "Tiny (39MB) - Fastest", "size": "39MB"},
             {"value": "base", "label": "Base (74MB) - Fast", "size": "74MB"},
             {"value": "small", "label": "Small (244MB) - Good", "size": "244MB"},
             {"value": "medium", "label": "Medium (769MB) - Better", "size": "769MB"},
-            {"value": "large", "label": "Large (1.5GB) - Best (Recommended)", "size": "1.5GB"}
+            {"value": "large", "label": "Large (1.5GB) - Best", "size": "1.5GB"},
+            {"value": "large-v3", "label": "Large-v3 (1.5GB) - Latest", "size": "1.5GB"},
+            {"value": "turbo", "label": "Turbo (809MB) - Optimized (Recommended)", "size": "809MB"}
         ],
         "transcript_formats": ["txt", "srt", "vtt", "json"]
     }
@@ -169,17 +171,20 @@ async def get_model_status():
     """Check download status of all required models"""
     models_dir = Path("./models")
     
-    # Whisper large-v3.pt - expected ~2.88 GB
-    WHISPER_EXPECTED = 3_091_500_032  # bytes
-    whisper_path = models_dir / "large-v3.pt"
-    if whisper_path.exists():
-        whisper_size = whisper_path.stat().st_size
+    # faster-whisper models are stored in CTranslate2 format
+    # Check for turbo model directory (faster-whisper format)
+    turbo_path = models_dir / "large-v3-turbo"
+    whisper_ready = turbo_path.exists() and (turbo_path / "config.json").exists()
+    
+    # Estimate size if available
+    if whisper_ready:
+        whisper_size = sum(f.stat().st_size for f in turbo_path.rglob("*") if f.is_file())
+        WHISPER_EXPECTED = 850_000_000  # ~850 MB for turbo model
         whisper_pct = min(100, round(whisper_size / WHISPER_EXPECTED * 100, 1))
-        whisper_ready = whisper_size >= WHISPER_EXPECTED * 0.99
     else:
-        whisper_size = 0
+        whisper_size = 0  
         whisper_pct = 0
-        whisper_ready = False
+        WHISPER_EXPECTED = 850_000_000
 
     # DeepFilterNet3 - auto-downloaded to venv cache
     deepfilter_ready = False
@@ -201,8 +206,8 @@ async def get_model_status():
     return {
         "models": {
             "whisper": {
-                "name": "Whisper Large v3",
-                "description": "Speech recognition (2.88 GB)",
+                "name": "faster-whisper Turbo",
+                "description": "Speech recognition (~850 MB)",
                 "ready": whisper_ready,
                 "progress": whisper_pct,
                 "downloaded": fmt_mb(whisper_size),

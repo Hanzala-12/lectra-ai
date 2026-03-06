@@ -1,17 +1,16 @@
 """
 Automatic Speech Recognition Module
-Transcribes the cleaned audio
+Transcribes the cleaned audio using faster-whisper
 """
 
 import numpy as np
-import torch
 from typing import Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
 
 class ASRProcessor:
-    """Automatic Speech Recognition using Whisper"""
+    """Automatic Speech Recognition using faster-whisper"""
     
     def __init__(self,
                  model_size: str = "tiny",
@@ -20,11 +19,15 @@ class ASRProcessor:
                  compute_type: str = "int8"):
         """
         Args:
-            model_size: Model size (tiny, base, small, medium, large)
+            model_size: Model size (tiny, base, small, medium, large, large-v3, turbo)
             language: Language code or None for auto-detection
-            device: torch device (cuda/cpu)
-            compute_type: Computation type (int8 for CPU, float16 for GPU, float32)
+            device: Device (cuda/cpu)
+            compute_type: Computation type (int8 for CPU, float16 for GPU, int8_float16)
         """
+        # Map turbo to the correct model name
+        if model_size == "turbo":
+            model_size = "large-v3-turbo"
+            
         self.model_size = model_size
         self.language = language
         self.compute_type = compute_type
@@ -39,56 +42,48 @@ class ASRProcessor:
             logger.warning("float16 not efficient on CPU, switching to int8")
             self.compute_type = 'int8'
         
-        logger.info(f"Initializing Whisper {model_size} on {self.device} with {self.compute_type}")
+        logger.info(f"Initializing faster-whisper {model_size} on {self.device} with {self.compute_type}")
         self._load_model()
     
     def _load_model(self):
-        """Load Whisper model with CPU optimization"""
+        """Load faster-whisper model with optimizations"""
         try:
-            import whisper
+            from faster_whisper import WhisperModel
             import os
             
             # Use local models folder
             models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
             os.makedirs(models_dir, exist_ok=True)
             
-            logger.info(f"Loading Whisper {self.model_size} model to {models_dir}")
+            logger.info(f"Loading faster-whisper {self.model_size} model to {models_dir}")
 
             try:
-                self.model = whisper.load_model(
+                self.model = WhisperModel(
                     self.model_size,
                     device=self.device,
-                    download_root=models_dir
+                    compute_type=self.compute_type,
+                    download_root=models_dir,
+                    cpu_threads=4 if self.device == 'cpu' else 0,
+                    num_workers=1
                 )
+                logger.info(f"faster-whisper model loaded successfully from {models_dir}")
+                
             except (MemoryError, RuntimeError) as mem_err:
-                logger.warning(f"Whisper {self.model_size} failed (likely OOM): {mem_err}")
-                logger.warning("Falling back to Whisper base model")
+                logger.warning(f"faster-whisper {self.model_size} failed (likely OOM): {mem_err}")
+                logger.warning("Falling back to base model")
                 self.model_size = 'base'
-                self.model = whisper.load_model(
+                self.model = WhisperModel(
                     'base',
                     device=self.device,
-                    download_root=models_dir
+                    compute_type=self.compute_type,
+                    download_root=models_dir,
+                    cpu_threads=4 if self.device == 'cpu' else 0,
+                    num_workers=1
                 )
-            
-            # Apply CPU optimizations
-            if self.device == 'cpu':
-                # Enable inference mode for faster CPU processing
-                self.model.eval()
-                
-                # Disable gradient computation
-                for param in self.model.parameters():
-                    param.requires_grad = False
-                
-                # Use optimized operators for CPU
-                if hasattr(torch, 'set_num_threads'):
-                    torch.set_num_threads(4)  # Use 4 threads for CPU
-                
-                logger.info("Applied CPU optimizations: inference mode, 4 threads")
-            
-            logger.info(f"Whisper model loaded successfully from {models_dir}")
+                logger.info("Fallback model loaded successfully")
             
         except Exception as e:
-            logger.error(f"Error loading Whisper model: {e}")
+            logger.error(f"Error loading faster-whisper model: {e}")
             raise
     
     def transcribe(self, 
@@ -102,23 +97,53 @@ class ASRProcessor:
             word_timestamps: Include word-level timestamps
             
         Returns:
-            Transcription result dictionary
+            Transcription result dictionary (compatible with original whisper format)
         """
         try:
-            # Load audio with librosa (avoids ffmpeg dependency)
-            import librosa
-            audio_array, _ = librosa.load(audio_path, sr=16000, mono=True)
-            audio_array = audio_array.astype(np.float32)
-
-            result = self.model.transcribe(
-                audio_array,
+            # faster-whisper can handle the file directly
+            segments_gen, info = self.model.transcribe(
+                audio_path,
                 language=self.language,
                 word_timestamps=word_timestamps,
-                verbose=False
+                vad_filter=True,  # Use built-in VAD for better accuracy
+                vad_parameters=dict(min_silence_duration_ms=500)
             )
             
-            n_segments = len(result.get('segments', []))
-            logger.info(f"Transcription complete: {n_segments} segments")
+            # Convert generator to list and build whisper-compatible dict
+            segments = []
+            full_text = []
+            
+            for segment in segments_gen:
+                seg_dict = {
+                    'id': segment.id,
+                    'start': segment.start,
+                    'end': segment.end,
+                    'text': segment.text,
+                }
+                
+                # Add word timestamps if requested
+                if word_timestamps and segment.words:
+                    seg_dict['words'] = [
+                        {
+                            'word': word.word,
+                            'start': word.start,
+                            'end': word.end,
+                            'probability': word.probability
+                        }
+                        for word in segment.words
+                    ]
+                
+                segments.append(seg_dict)
+                full_text.append(segment.text)
+            
+            result = {
+                'text': ' '.join(full_text),
+                'segments': segments,
+                'language': info.language,
+                'language_probability': info.language_probability
+            }
+            
+            logger.info(f"Transcription complete: {len(segments)} segments, language: {info.language}")
             
             return result
             
