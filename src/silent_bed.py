@@ -93,6 +93,7 @@ class SilentBedTransplant:
         enhanced_audio: np.ndarray,
         speech_segments: List[Tuple[int, int]],
         energy_threshold: float = 0.02,
+        background_gain: float = 0.08,
     ) -> np.ndarray:
         """
         Smart transplant that analyzes energy levels
@@ -102,54 +103,30 @@ class SilentBedTransplant:
             enhanced_audio: Enhanced audio
             speech_segments: Speech segment boundaries
             energy_threshold: Threshold for detecting silence
+            background_gain: Residual gain outside speech regions [0, 1]
 
         Returns:
             Optimally combined audio
         """
-        output = original_audio.copy()
+        # Pure silence background — no original or enhanced audio bleeds in outside speech.
+        output = np.zeros_like(enhanced_audio)
 
         for start, end in speech_segments:
             segment_len = end - start
-            orig_seg = original_audio[start:end]
-            enh_seg = enhanced_audio[start:end]
+            if segment_len <= 0:
+                continue
+            enh_seg = enhanced_audio[start:end].copy()
 
-            # Calculate RMS energy in windows
-            window_size = int(0.02 * self.sample_rate)  # 20ms windows
-
-            # Detect truly silent regions within speech segment
-            hop = window_size // 2
-            orig_energy = []
-
-            for i in range(0, segment_len - window_size, hop):
-                window = orig_seg[i : i + window_size]
-                rms = np.sqrt(np.mean(window**2))
-                orig_energy.append(rms)
-
-            # Create mixing envelope
-            mix_envelope = np.ones(segment_len)
-
-            for i, energy in enumerate(orig_energy):
-                pos = i * hop
-                if energy < energy_threshold:
-                    # Use more of original in silent regions
-                    mix_envelope[pos : pos + window_size] = 0.3
-
-            # Smooth envelope
-            if len(mix_envelope) > 100:
-                smooth_window = signal.windows.hann(51)
-                smooth_window /= smooth_window.sum()
-                mix_envelope = signal.convolve(mix_envelope, smooth_window, mode="same")
-
-            # Apply crossfades at boundaries
+            # Apply short cosine fades at boundaries to avoid clicks.
+            # Speech interior is untouched — 100% clean denoised audio.
             if segment_len > 2 * self.fade_samples:
                 fade_in = self._create_fade(self.fade_samples, fade_in=True)
-                mix_envelope[: self.fade_samples] *= fade_in
+                enh_seg[: self.fade_samples] *= fade_in
 
                 fade_out = self._create_fade(self.fade_samples, fade_in=False)
-                mix_envelope[-self.fade_samples :] *= fade_out
+                enh_seg[-self.fade_samples :] *= fade_out
 
-            # Mix segments
-            output[start:end] = orig_seg * (1 - mix_envelope) + enh_seg * mix_envelope
+            output[start:end] = enh_seg
 
-        logger.info("Smart silent-bed transplant completed")
+        logger.info("Silent-bed transplant completed: clean speech on pure silence")
         return output

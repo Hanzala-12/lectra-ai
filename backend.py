@@ -33,7 +33,7 @@ except Exception:
     pass
 
 try:
-    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST  # type: ignore
 
     METRICS_AVAILABLE = True
 except ImportError:
@@ -42,7 +42,7 @@ except ImportError:
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from pipeline import VoiceCleaningPipeline
+from pipeline import VoiceCleaningPipeline  # type: ignore
 
 # Setup structured logging
 logging.basicConfig(
@@ -133,7 +133,11 @@ def initialize_pipeline(config: ProcessingConfig):
     global pipeline
 
     if pipeline is None:
-        pipeline = VoiceCleaningPipeline("config.yaml", enable_cache=True)
+        import yaml as _yaml
+        with open("config.yaml") as _f:
+            _cfg = _yaml.safe_load(_f)
+        _cache_enabled = _cfg.get("cache", {}).get("enabled", False)
+        pipeline = VoiceCleaningPipeline("config.yaml", enable_cache=_cache_enabled)
 
     # Skip ASR initialisation entirely when asr.skip is true
     asr_skip = pipeline.config.get("asr", {}).get("skip", False)
@@ -143,7 +147,7 @@ def initialize_pipeline(config: ProcessingConfig):
             logger.info(
                 f"Loading faster-whisper '{config.whisper_model}' (was '{current_model}')"
             )
-            from asr_processor import ASRProcessor
+            from asr_processor import ASRProcessor  # type: ignore
 
             pipeline.asr = ASRProcessor(
                 model_size=config.whisper_model,
@@ -507,10 +511,10 @@ async def download_file(filename: str):
 
 
 if __name__ == "__main__":
-    print("🚀 Starting Voice Cleaning API Server...")
-    print("📡 Server running at: http://localhost:8000")
-    print("📚 API Docs: http://localhost:8000/docs")
-    print("🎯 Health Check: http://localhost:8000/api/health")
-    print("\n⚠️  Make sure to start the React frontend on port 3000!")
+    print("Starting Voice Cleaning API Server...")
+    print("Server running at: http://localhost:8000")
+    print("API Docs: http://localhost:8000/docs")
+    print("Health Check: http://localhost:8000/api/health")
+    print("\nMake sure to start the React frontend on port 3000!")
 
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

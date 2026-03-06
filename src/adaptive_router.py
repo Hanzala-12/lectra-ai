@@ -43,25 +43,15 @@ class AdaptiveRouter:
         # Statistics tracking
         self.routing_stats = {"lightweight": 0, "moderate": 0, "heavy": 0, "total": 0}
 
-    def lightweight_filter(self, audio: np.ndarray) -> np.ndarray:
+    def lightweight_filter(self, audio: np.ndarray, silence_segments: list = None) -> np.ndarray:
         """
         Custom lightweight noise filter using spectral subtraction.
 
-        Theory: Spectral Subtraction (Boll 1979)
-        1. Estimate noise spectrum from initial frames
-        2. Subtract noise spectrum from signal spectrum
-        3. Reconstruct time-domain signal
-
-        |Y[k]| = max(|X[k]| - α|N[k]|, β|X[k]|)
-
-        where:
-        - X[k] = noisy spectrum
-        - N[k] = noise estimate
-        - α = over-subtraction factor (1.5-2.0)
-        - β = spectral floor (0.1-0.2)
-
         Args:
             audio: Input audio signal
+            silence_segments: Optional list of (start, end) sample ranges
+                              known to be non-speech, used for accurate
+                              noise estimation.
 
         Returns:
             Filtered audio
@@ -76,12 +66,23 @@ class AdaptiveRouter:
         frame_length = int(0.025 * self.sample_rate)  # 25ms frames
         hop_length = frame_length // 2
 
-        # Estimate noise from first 10 frames (assume initial silence/noise)
+        # --- Noise estimation from known silence regions when available ---
         noise_frames = []
-        for i in range(
-            0, min(10 * frame_length, len(audio) - frame_length), frame_length
-        ):
-            noise_frames.append(audio[i : i + frame_length])
+        if silence_segments:
+            for seg_start, seg_end in silence_segments:
+                for i in range(seg_start, min(seg_end - frame_length, len(audio) - frame_length), frame_length):
+                    noise_frames.append(audio[i : i + frame_length])
+                    if len(noise_frames) >= 30:
+                        break
+                if len(noise_frames) >= 30:
+                    break
+
+        # Fallback: first 10 frames
+        if len(noise_frames) == 0:
+            for i in range(
+                0, min(10 * frame_length, len(audio) - frame_length), frame_length
+            ):
+                noise_frames.append(audio[i : i + frame_length])
 
         if len(noise_frames) > 0:
             noise_estimate = np.mean(noise_frames, axis=0)
@@ -123,20 +124,14 @@ class AdaptiveRouter:
         logger.info("Lightweight filter complete")
         return output
 
-    def moderate_filter(self, audio: np.ndarray) -> np.ndarray:
+    def moderate_filter(self, audio: np.ndarray, silence_segments: list = None) -> np.ndarray:
         """
         Moderate filter using Wiener filtering.
 
-        Theory: Wiener Filter (optimal MMSE estimator)
-
-        H[k] = max(1 - (σ_noise² / |X[k]|²), H_min)
-
-        where:
-        - σ_noise² = noise power estimate
-        - H_min = minimum gain to prevent over-suppression
-
         Args:
             audio: Input audio
+            silence_segments: Optional list of (start, end) sample ranges
+                              known to be non-speech.
 
         Returns:
             Filtered audio
@@ -150,15 +145,34 @@ class AdaptiveRouter:
         frame_length = int(0.032 * self.sample_rate)  # 32ms
         hop_length = frame_length // 2
 
-        # Estimate noise power from low-energy frames
-        frame_powers = []
-        for i in range(0, len(audio) - frame_length, frame_length):
-            frame = audio[i : i + frame_length]
-            power = np.mean(frame**2)
-            frame_powers.append(power)
+        # --- Noise power from known silence regions when available ---
+        if silence_segments:
+            noise_frames_power = []
+            for seg_start, seg_end in silence_segments:
+                for i in range(seg_start, min(seg_end - frame_length, len(audio) - frame_length), frame_length):
+                    frame = audio[i : i + frame_length]
+                    noise_frames_power.append(np.mean(frame ** 2))
+                    if len(noise_frames_power) >= 30:
+                        break
+                if len(noise_frames_power) >= 30:
+                    break
+            if noise_frames_power:
+                noise_power = float(np.mean(noise_frames_power))
+            else:
+                noise_power = None
+        else:
+            noise_power = None
 
-        frame_powers_sorted = np.sort(frame_powers)
-        noise_power = np.mean(frame_powers_sorted[: len(frame_powers_sorted) // 5])
+        # Fallback: lowest 20% energy frames
+        if noise_power is None:
+            frame_powers = []
+            for i in range(0, len(audio) - frame_length, frame_length):
+                frame = audio[i : i + frame_length]
+                power = np.mean(frame ** 2)
+                frame_powers.append(power)
+
+            frame_powers_sorted = np.sort(frame_powers)
+            noise_power = float(np.mean(frame_powers_sorted[: len(frame_powers_sorted) // 5]))
 
         # Process frames
         output = np.zeros_like(audio)
@@ -195,21 +209,17 @@ class AdaptiveRouter:
         return output
 
     def route_processing(
-        self, audio: np.ndarray, noise_profile: Dict, heavy_processor: Callable = None
+        self, audio: np.ndarray, noise_profile: Dict, heavy_processor: Callable = None,
+        silence_segments: list = None,
     ) -> Tuple[np.ndarray, str]:
         """
         Main routing logic that decides processing path.
-
-        Decision tree:
-        1. Analyze audio characteristics
-        2. Compare against thresholds
-        3. Route to appropriate processor
-        4. Track statistics
 
         Args:
             audio: Input audio
             noise_profile: Profile dict from AudioQualityProfiler
             heavy_processor: Optional heavy processing function (e.g., DeepFilterNet)
+            silence_segments: List of (start, end) sample ranges known to be non-speech
 
         Returns:
             Tuple of (processed_audio, routing_decision)
@@ -253,11 +263,11 @@ class AdaptiveRouter:
 
         # Execute routing
         if decision == "lightweight":
-            processed = self.lightweight_filter(audio)
+            processed = self.lightweight_filter(audio, silence_segments=silence_segments)
             self.routing_stats["lightweight"] += 1
 
         elif decision == "moderate":
-            processed = self.moderate_filter(audio)
+            processed = self.moderate_filter(audio, silence_segments=silence_segments)
             self.routing_stats["moderate"] += 1
 
         elif decision == "heavy":

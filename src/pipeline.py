@@ -8,7 +8,7 @@ import time
 import yaml
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
 
 from media_loader import MediaLoader
@@ -18,6 +18,10 @@ from silent_bed import SilentBedTransplant
 from diarization import SpeakerDiarization
 from asr_processor import ASRProcessor
 from cache_manager import FileCache
+from audio_quality_profiler import AudioQualityProfiler
+from adaptive_router import AdaptiveRouter
+from spectral_restoration import SpectralRestoration
+from scipy.signal import butter, sosfiltfilt
 
 # Setup logging
 logging.basicConfig(
@@ -72,6 +76,9 @@ class VoiceCleaningPipeline:
             },
             "deepfilternet": {"model": "DeepFilterNet3", "post_filter": True},
             "silent_bed": {"fade_duration_ms": 20, "preserve_original_silence": True},
+            "adaptive_processing": {"enabled": True},
+            "restoration": {"enabled": True, "heavy_only": True},
+            "speech_blend": {"background_gain": 0.06, "energy_threshold": 0.015},
             "diarization": {"enabled": True, "min_speakers": 1, "max_speakers": 10},
             "asr": {"model": "base", "language": "en", "compute_type": "float16"},
             "output": {"format": "wav", "bit_depth": 16, "preserve_video": True},
@@ -111,6 +118,9 @@ class VoiceCleaningPipeline:
         self.silent_bed = SilentBedTransplant(
             fade_duration_ms=sb_config["fade_duration_ms"], sample_rate=self.sample_rate
         )
+        self.profiler = AudioQualityProfiler(sample_rate=self.sample_rate)
+        self.router = AdaptiveRouter(sample_rate=self.sample_rate)
+        self.restorer = SpectralRestoration(sample_rate=self.sample_rate)
 
         # Diarization (optional)
         if self.config["diarization"]["enabled"]:
@@ -129,6 +139,53 @@ class VoiceCleaningPipeline:
         logger.info(
             "All components initialized successfully (ASR will load on first use)"
         )
+
+    def _merge_segments(
+        self, segments: List[Tuple[int, int]], max_length: int
+    ) -> List[Tuple[int, int]]:
+        """Merge overlapping sample segments and clip to valid audio bounds."""
+        normalized = []
+        for start, end in segments:
+            start = max(0, int(start))
+            end = min(max_length, int(end))
+            if end > start:
+                normalized.append((start, end))
+
+        if not normalized:
+            return []
+
+        normalized.sort(key=lambda item: item[0])
+        merged = [normalized[0]]
+
+        for start, end in normalized[1:]:
+            prev_start, prev_end = merged[-1]
+            if start <= prev_end:
+                merged[-1] = (prev_start, max(prev_end, end))
+            else:
+                merged.append((start, end))
+
+        return merged
+
+    def _build_processing_segments(
+        self,
+        speech_segments: List[Tuple[int, int]],
+        diarization_results: List[Dict[str, Any]],
+        sr: int,
+        audio_length: int,
+    ) -> List[Tuple[int, int]]:
+        """Combine VAD and diarization spans into a single speech mask."""
+        segments: List[Tuple[int, int]] = list(speech_segments)
+
+        for seg in diarization_results:
+            start_sample = int(seg.get("start", 0.0) * sr)
+            end_sample = int(seg.get("end", 0.0) * sr)
+            if end_sample > start_sample:
+                segments.append((start_sample, end_sample))
+
+        if not segments:
+            segments = [(0, audio_length)]
+
+        return self._merge_segments(segments, audio_length)
 
     def process(
         self,
@@ -190,34 +247,20 @@ class VoiceCleaningPipeline:
         logger.info(f"Starting voice cleaning pipeline for: {input_path}")
         logger.info("=" * 70)
 
-        # Create output directory
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-
         input_name = Path(input_path).stem
 
-        # Step 1: Load media
-        logger.info("STEP 1: Loading media and extracting audio")
+        # STEP 1: Load media
+        logger.info("STEP 1: Loading media")
         audio, sr, is_video = self.media_loader.load_media(input_path)
-        logger.info(
-            f"Loaded: {len(audio)/sr:.2f}s audio from {'video' if is_video else 'audio'}"
-        )
+        logger.info(f"Loaded {len(audio)/sr:.2f}s from {'video' if is_video else 'audio'}")
 
-        # Step 2: Pre-VAD trim
-        logger.info("\nSTEP 2: Pre-VAD trim (removing silence at edges)")
-        trimmed_audio, speech_segments = self.vad_processor.trim_silence(audio)
-        logger.info(
-            f"Trimmed to {len(trimmed_audio)/sr:.2f}s with {len(speech_segments)} speech segments"
-        )
-
-        # Step 3: DIARIZATION FIRST - identify exact voice segments
-        logger.info("\nSTEP 3: Speaker diarization (identifying voice-only segments)")
-
-        # Save temporary file for diarization
-        temp_audio_path = output_dir / f"{input_name}_temp.wav"
+        # STEP 2: Diarize — find who speaks when
+        logger.info("\nSTEP 2: Diarizing — finding speaker segments")
         import soundfile as sf
-
-        sf.write(str(temp_audio_path), trimmed_audio, sr)
+        temp_audio_path = output_dir / f"{input_name}_temp.wav"
+        sf.write(str(temp_audio_path), audio, sr)
 
         diarization_results = []
         if self.diarization is not None:
@@ -225,72 +268,72 @@ class VoiceCleaningPipeline:
                 diarization_results = self.diarization.diarize(str(temp_audio_path))
                 if diarization_results:
                     stats = self.diarization.get_speaker_statistics(diarization_results)
-                    logger.info(f"Identified {len(stats)} speakers: {stats}")
-                    logger.info(f"Found {len(diarization_results)} voice segments")
+                    logger.info(f"Identified {len(stats)} speaker(s), {len(diarization_results)} segments")
             except Exception as e:
-                logger.warning(f"Diarization failed: {e}")
+                logger.warning(f"Diarization failed, falling back to VAD: {e}")
 
-        # Step 4: VOICE ISOLATION - Extract voice segments and place on SILENT track
-        logger.info(
-            "\nSTEP 4: Voice isolation (extracting speech, removing ALL background)"
-        )
-
-        if diarization_results and len(diarization_results) > 0:
-            # Create silent track
-            isolated_audio = np.zeros_like(trimmed_audio)
-
-            total_voice_duration = 0
+        # Build speech segments from diarization; fall back to VAD if unavailable
+        if diarization_results:
+            speech_segments = []
             for seg in diarization_results:
-                start_sample = int(seg["start"] * sr)
-                end_sample = int(seg["end"] * sr)
-                start_sample = max(0, start_sample)
-                end_sample = min(len(trimmed_audio), end_sample)
-
-                # Copy ONLY voice segments to silent track
-                isolated_audio[start_sample:end_sample] = trimmed_audio[
-                    start_sample:end_sample
-                ]
-                total_voice_duration += (end_sample - start_sample) / sr
-
-            logger.info(
-                f"Extracted {total_voice_duration:.2f}s of pure voice (background completely removed)"
-            )
-            trimmed_audio = isolated_audio  # Replace with voice-only track
+                start_i = int(seg["start"] * sr)
+                end_i = min(int(seg["end"] * sr), len(audio))
+                if end_i > start_i:
+                    speech_segments.append((start_i, end_i))
+            speech_segments = self._merge_segments(speech_segments, len(audio))
         else:
-            logger.warning(
-                "No diarization results - processing with background noise present"
-            )
+            logger.info("No diarization — using VAD for speech boundaries")
+            _, speech_segments = self.vad_processor.trim_silence(audio)
 
-        # Step 5: DeepFilterNet on ISOLATED voice (no background noise to fight!)
-        logger.info("\nSTEP 5: DeepFilterNet AI enhancement (cleaning isolated voice)")
-        enhanced_audio = self.deepfilter.process_audio(trimmed_audio, sr)
+        logger.info(f"{len(speech_segments)} speech segment(s) to process")
 
-        # Normalize audio
-        final_audio = enhanced_audio
+        # STEP 3: Place speech on a zero-background (pure silence) track
+        # This eliminates ALL background noise between words and speakers.
+        logger.info("\nSTEP 3: Placing speech on silent background")
+        clean_base = np.zeros(len(audio), dtype=np.float32)
+        for start, end in speech_segments:
+            clean_base[start:end] = audio[start:end]
+
+        # STEP 4: DeepFilterNet — remove remaining noise inside speech segments
+        logger.info("\nSTEP 4: DeepFilterNet noise removal on speech")
+        enhanced_audio = self.deepfilter.process_audio(clean_base, sr)
+
+        # STEP 5: Re-apply zero outside speech so DeepFilterNet output bleed is gone
+        # Apply 10ms cosine fades at segment edges to avoid clicks.
+        logger.info("\nSTEP 5: Re-masking — zeroing outside speech segments")
+        fade_samples = int(0.010 * sr)
+        final_audio = np.zeros(len(enhanced_audio), dtype=np.float32)
+        for start, end in speech_segments:
+            seg = enhanced_audio[start:end].copy()
+            seg_len = end - start
+            if seg_len > 2 * fade_samples:
+                fade_in = 0.5 * (1 - np.cos(np.linspace(0, np.pi, fade_samples)))
+                seg[:fade_samples] *= fade_in
+                fade_out = 0.5 * (1 + np.cos(np.linspace(0, np.pi, fade_samples)))
+                seg[-fade_samples:] *= fade_out
+            final_audio[start:end] = seg
+
+        # Normalize to -0.5 dBFS
         max_val = np.abs(final_audio).max()
         if max_val > 0:
-            final_audio = final_audio / max_val * 0.95
+            final_audio = (final_audio / max_val * 0.95).astype(np.float32)
 
-        # Step 6: Save cleaned audio
+        # STEP 6: Save cleaned audio
         logger.info("\nSTEP 6: Saving cleaned audio")
         output_format = self.config["output"]["format"]
         bit_depth = self.config["output"]["bit_depth"]
-
         audio_output_path = output_dir / f"{input_name}_cleaned.{output_format}"
         self.media_loader.save_audio(
-            final_audio,
-            sr,
-            str(audio_output_path),
-            format=output_format,
-            bit_depth=bit_depth,
+            final_audio, sr, str(audio_output_path),
+            format=output_format, bit_depth=bit_depth,
         )
 
         # Clean up temp file
         if temp_audio_path.exists():
             temp_audio_path.unlink()
 
-        # Step 7: Automatic speech recognition
-        logger.info("\nSTEP 7: Automatic speech recognition")
+        # STEP 7: Automatic speech recognition
+        logger.info("\nSTEP 8: Automatic speech recognition")
         transcript = {"text": "", "segments": []}
 
         if self.config["asr"].get("skip", False):
@@ -384,10 +427,10 @@ class VoiceCleaningPipeline:
                 )
                 logger.info(f"Transcript saved to: {transcript_path}")
 
-        # Step 8: Merge back to video if needed
+        # Step 9: Merge back to video if needed
         video_output_path = None
         if is_video and self.config["output"]["preserve_video"]:
-            logger.info("\nSTEP 8: Merging cleaned audio back to video")
+            logger.info("\nSTEP 9: Merging cleaned audio back to video")
             video_output_path = output_dir / f"{input_name}_cleaned.mp4"
             try:
                 self.media_loader.merge_audio_to_video(
@@ -437,6 +480,21 @@ class VoiceCleaningPipeline:
                 logger.warning(f"Failed to cache results: {e}")
 
         return results
+
+    @staticmethod
+    def _invert_segments(
+        speech_segments: List[Tuple[int, int]], total_length: int
+    ) -> List[Tuple[int, int]]:
+        """Return the gaps (non-speech) between speech segments."""
+        gaps: List[Tuple[int, int]] = []
+        prev_end = 0
+        for start, end in sorted(speech_segments):
+            if start > prev_end:
+                gaps.append((prev_end, start))
+            prev_end = max(prev_end, end)
+        if prev_end < total_length:
+            gaps.append((prev_end, total_length))
+        return gaps
 
     def process_batch(
         self,

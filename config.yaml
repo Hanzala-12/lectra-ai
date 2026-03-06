@@ -14,11 +14,21 @@ vad:
 deepfilternet:
   model: "DeepFilterNet3"  # DeepFilterNet2 or DeepFilterNet3
   post_filter: true  # additional post-processing
-  double_pass: false  # DISABLED - using silence isolation instead
   
 silent_bed:
   fade_duration_ms: 20  # crossfade duration for transplant
   preserve_original_silence: true  # keep original silent portions
+
+adaptive_processing:
+  enabled: true  # route clean clips to lighter DSP and noisy clips to DeepFilterNet
+
+restoration:
+  enabled: true  # restore speech brightness after stronger denoising
+  heavy_only: true  # only restore after the heavy path is selected
+
+speech_blend:
+  background_gain: 0.0  # 0 = pure silence outside speech segments
+  energy_threshold: 0.015  # lower = stronger use of original bed in low-energy speech pockets
   
 diarization:
   enabled: true
@@ -26,9 +36,9 @@ diarization:
   max_speakers: 10
   
 asr:
-  skip: false   # set false to enable transcription
+  skip: true   # PAUSED - set false to re-enable transcription
   model: "turbo"  # tiny, base, small, medium, large, large-v3, turbo (recommended)
-  language: "en"  # auto-detect if null
+  language: null  # auto-detect if null
   compute_type: "int8"  # int8 (fastest on CPU), float16, or float32
   device: "cpu"  # cpu or cuda (auto-detect if not set)
   
