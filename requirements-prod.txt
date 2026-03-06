@@ -2,6 +2,9 @@
 # Use this for CI/CD to avoid dependency resolution issues
 # Generated: March 2026
 
+# System Dependencies
+setuptools==68.0.0
+
 # Core Dependencies - PyTorch ecosystem
 torch==2.5.1
 torchaudio==2.5.1

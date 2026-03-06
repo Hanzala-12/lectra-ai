@@ -11,17 +11,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-prod.txt .
+RUN pip install --no-cache-dir -r requirements-prod.txt
 
 # Copy application code
 COPY src/ ./src/
 COPY backend.py config.yaml ./
 
-# Download base models at build time to speed up runtime
-RUN python -c "import whisper; whisper.load_model('base', download_root='./models')"
-
-# Create directories
+# Create directories for models and outputs
+# Models will be downloaded on first use or mounted as volumes
 RUN mkdir -p /app/models /app/outputs
 
 # Expose port
