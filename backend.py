@@ -5,8 +5,9 @@ FastAPI Backend Server for Voice Cleaning Pipeline
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from typing import Optional
+from contextlib import asynccontextmanager
 import uvicorn
 import os
 import sys
@@ -49,10 +50,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global pipeline instance
+pipeline = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup/shutdown events"""
+    # Startup
+    logger.info("Server startup: pre-warming pipeline (loading models into memory)...")
+    try:
+        config = ProcessingConfig()
+        initialize_pipeline(config)
+        logger.info("Pipeline pre-warmed successfully — ready to process requests")
+    except Exception as e:
+        logger.error(f"Pipeline pre-warm failed: {e} — will retry on first request")
+    
+    yield
+    
+    # Shutdown (if needed)
+    logger.info("Server shutdown")
+
+
 app = FastAPI(
     title="Voice Cleaning API",
     version="1.0.0",
     description="AI-powered voice cleaning with DeepFilterNet and Whisper",
+    lifespan=lifespan,
 )
 
 # Enable CORS
@@ -63,21 +87,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Global pipeline instance
-pipeline = None
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Pre-warm the pipeline at server startup so the first user request is instant."""
-    logger.info("Server startup: pre-warming pipeline (loading models into memory)...")
-    try:
-        config = ProcessingConfig()
-        initialize_pipeline(config)
-        logger.info("Pipeline pre-warmed successfully — ready to process requests")
-    except Exception as e:
-        logger.error(f"Pipeline pre-warm failed: {e} — will retry on first request")
 
 
 # Configuration
@@ -102,14 +111,16 @@ class ProcessingConfig(BaseModel):
     enable_diarization: bool = True
     transcript_format: str = "txt"
 
-    @validator("whisper_model")
+    @field_validator("whisper_model")
+    @classmethod
     def validate_model(cls, v):
         allowed = ["tiny", "base", "small", "medium", "large", "large-v3", "turbo"]
         if v not in allowed:
             raise ValueError(f"Model must be one of {allowed}")
         return v
 
-    @validator("transcript_format")
+    @field_validator("transcript_format")
+    @classmethod
     def validate_format(cls, v):
         allowed = ["txt", "srt", "vtt", "json"]
         if v not in allowed:
