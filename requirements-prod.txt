@@ -1,0 +1,59 @@
+# Production Requirements with Pinned Versions
+# Use this for CI/CD to avoid dependency resolution issues
+# Generated: March 2026
+
+# Core Dependencies - PyTorch ecosystem
+torch==2.5.1
+torchaudio==2.5.1
+numpy==1.26.4
+scipy==1.13.1
+
+# Audio Processing
+librosa==0.10.2
+soundfile==0.12.1
+pydub==0.25.1
+
+# DeepFilterNet for noise reduction
+deepfilternet==0.5.6
+
+# Post-diarization spectral noise gating
+noisereduce==3.0.2
+
+# Voice Activity Detection
+webrtcvad-wheels==2.0.11
+silero-vad==5.1.2
+
+# Diarization - pinned to avoid resolution depth issues
+pyannote.audio==3.3.2
+lightning==2.4.0
+torchmetrics==1.6.1
+lightning-utilities==0.11.8
+
+# PyTorch ecosystem dependencies - pinned
+fsspec==2024.10.0
+aiohttp==3.10.11
+aiohappyeyeballs==2.5.0
+frozenlist==1.6.2
+yarl==1.20.1
+multidict==6.6.4
+async-timeout==4.0.3
+
+# Speech Recognition
+faster-whisper==1.0.3
+
+# Video Processing
+moviepy==1.0.3
+ffmpeg-python==0.2.0
+
+# Utilities
+tqdm==4.67.1
+pyyaml==6.0.2
+
+# Web Interface
+streamlit==1.40.2
+
+# Backend API
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+websockets==13.1

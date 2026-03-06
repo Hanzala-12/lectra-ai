@@ -1,43 +1,50 @@
 # Core Dependencies
-torch>=2.0.0
-torchaudio>=2.0.0
-numpy>=1.24.0
-scipy>=1.10.0
+torch>=2.0.0,<2.6.0
+torchaudio>=2.0.0,<2.6.0
+numpy>=1.24.0,<2.0.0
+scipy>=1.10.0,<1.15.0
 
 # Audio Processing
-librosa>=0.10.0
-soundfile>=0.12.1
-pydub>=0.25.1
+librosa>=0.10.0,<0.11.0
+soundfile>=0.12.1,<0.13.0
+pydub>=0.25.1,<0.26.0
 
 # DeepFilterNet for noise reduction
-deepfilternet>=0.5.6
+deepfilternet>=0.5.6,<0.6.0
 
 # Post-diarization spectral noise gating
-noisereduce>=3.0.0
+noisereduce>=3.0.0,<4.0.0
 
 # Voice Activity Detection
-webrtcvad-wheels>=2.0.10  # Pre-compiled version for Windows compatibility
-silero-vad>=4.0.0
+webrtcvad-wheels>=2.0.10,<3.0.0  # Pre-compiled version for Windows compatibility
+silero-vad>=4.0.0,<5.0.0
 
-# Diarization
-pyannote.audio>=3.1.0
+# Diarization - tightly constrained to avoid resolution issues
+pyannote.audio>=3.1.0,<3.2.0
+lightning>=2.4.0,<2.4.1
+torchmetrics>=1.6.1,<1.7.0
+lightning-utilities>=0.10.0,<0.12.0
+
+# PyTorch ecosystem - constrain to avoid conflicts
+fsspec>=2022.5.0,<2025.0
+aiohttp>=3.9.0,<3.11.0
 
 # Speech Recognition
-openai-whisper>=20231117
+faster-whisper>=1.0.0,<2.0.0
 
 # Video Processing
-moviepy>=1.0.3
-ffmpeg-python>=0.2.0
+moviepy>=1.0.3,<2.0.0
+ffmpeg-python>=0.2.0,<0.3.0
 
 # Utilities
-tqdm>=4.65.0
-pyyaml>=6.0
+tqdm>=4.65.0,<5.0.0
+pyyaml>=6.0,<7.0
 
 # Web Interface
-streamlit>=1.31.0
+streamlit>=1.31.0,<2.0.0
 
 # Backend API
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-python-multipart>=0.0.6
-websockets>=12.0
+fastapi>=0.109.0,<0.120.0
+uvicorn[standard]>=0.27.0,<0.32.0
+python-multipart>=0.0.6,<0.1.0
+websockets>=12.0,<14.0
