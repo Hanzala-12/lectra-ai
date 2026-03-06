@@ -460,6 +460,8 @@ async def process_audio(
             "speaker_audio": speaker_audio_urls,
         }
 
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         return JSONResponse(
             status_code=500, content={"success": False, "error": str(e)}

@@ -47,13 +47,11 @@ def test_audio_quality_profiler():
         print(f"   Spectral flatness: {profile['spectral_flatness']:.4f}")
         print(f"   Recommended processing: {profile['recommended_processing']}")
         
-        return True
-        
     except Exception as e:
         print(f"❌ FAILED: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 def test_spectral_restoration():
@@ -94,13 +92,11 @@ def test_spectral_restoration():
         restored = restorer.adaptive_restoration(original, processed)
         print(f"✅ Adaptive restoration: output {len(restored)} samples")
         
-        return True
-        
     except Exception as e:
         print(f"❌ FAILED: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 def test_audio_quality_metrics():
@@ -152,13 +148,11 @@ def test_audio_quality_metrics():
         )
         print(f"✅ Overall Quality Score: {full_metrics['overall_quality_score']:.1f}/100")
         
-        return True
-        
     except Exception as e:
         print(f"❌ FAILED: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 def test_adaptive_router():
@@ -213,13 +207,11 @@ def test_adaptive_router():
         stats = router.get_routing_statistics()
         print(f"✅ Routing statistics: {stats['total_routed']} files routed")
         
-        return True
-        
     except Exception as e:
         print(f"❌ FAILED: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 def main():
