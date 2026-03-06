@@ -12,13 +12,13 @@ This project combines state-of-the-art deep learning models with custom algorith
 
 ### Key Features
 
-- 🎯 **State-of-Art Noise Removal**: DeepFilterNet3 deep learning model
-- 🗣️ **Speaker Diarization**: Automatic speaker identification using Pyannote
-- 📝 **Speech Recognition**: faster-whisper turbo model for transcription
-- 🧮 **Custom DSP Algorithms**: 2,950+ lines of hand-written signal processing code
-- ⚡ **Performance Optimized**: 64x speedup on CPU-intensive operations
-- 🌐 **Web Interface**: React frontend + FastAPI backend
-- 🐳 **Docker Support**: One-command deployment
+- **State-of-Art Noise Removal**: DeepFilterNet3 deep learning model
+- **Speaker Diarization**: Automatic speaker identification using Pyannote
+- **Speech Recognition**: faster-whisper turbo model for transcription
+- **Custom DSP Algorithms**: 2,950+ lines of hand-written signal processing code
+- **Performance Optimized**: 64x speedup on CPU-intensive operations
+- **Web Interface**: React frontend + FastAPI backend
+- **Docker Support**: One-command deployment
 
 ---
 
@@ -237,17 +237,17 @@ python examples/performance_benchmark.py
 
 **Expected output**:
 ```
-📊 RESULTS - Frame Energy Calculation
+RESULTS - Frame Energy Calculation
   Original:     38.50 ms
   Optimized:     0.60 ms
-  ⚡ Speedup:    64.2x faster
+  Speedup:      64.2x faster
 
-📊 RESULTS - SNR Estimation
+RESULTS - SNR Estimation
   Original:     18.70 ms
   Optimized:     0.80 ms
-  ⚡ Speedup:    23.4x faster
+  Speedup:      23.4x faster
 
-✅ All accuracy tests: PASSED
+All accuracy tests: PASSED
 ```
 
 ### Custom Integration Demo
@@ -510,7 +510,7 @@ If you use this project in your research, please cite:
 
 ---
 
-**Status**: ✅ Production Ready + Research Extensions  
+**Status**: Production Ready + Research Extensions  
 **Last Updated**: March 2026  
 **Maintainer**: Your Name
 
@@ -518,6 +518,6 @@ If you use this project in your research, please cite:
 
 ## Star History
 
-If you find this project useful, please consider giving it a star ⭐
+If you find this project useful, please consider giving it a star on GitHub.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=yourusername/voice-cleaning-pipeline&type=Date)](https://star-history.com/#yourusername/voice-cleaning-pipeline&Date)

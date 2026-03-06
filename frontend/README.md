@@ -4,12 +4,12 @@ Modern web interface for the Voice Cleaning Pipeline built with React 18 and Mat
 
 ## Features
 
-- 🎨 Modern, responsive UI with Material-UI components
-- 📁 Drag & drop file upload with react-dropzone
-- ⚙️ Configurable processing settings (Whisper model, diarization, transcript format)
-- 🎧 Live audio/video preview of processed files
-- 📥 One-click download of cleaned files and transcripts
-- 📊 Real-time processing progress feedback
+- Modern, responsive UI with Material-UI components
+- Drag & drop file upload with react-dropzone
+- Configurable processing settings (Whisper model, diarization, transcript format)
+- Live audio/video preview of processed files
+- One-click download of cleaned files and transcripts
+- Real-time processing progress feedback
 
 ## Prerequisites
 
