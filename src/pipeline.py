@@ -14,14 +14,9 @@ import numpy as np
 from media_loader import MediaLoader
 from vad_processor import VADProcessor
 from deepfilter_processor import DeepFilterProcessor
-from silent_bed import SilentBedTransplant
 from diarization import SpeakerDiarization
 from asr_processor import ASRProcessor
 from cache_manager import FileCache
-from audio_quality_profiler import AudioQualityProfiler
-from adaptive_router import AdaptiveRouter
-from spectral_restoration import SpectralRestoration
-from scipy.signal import butter, sosfiltfilt
 
 # Setup logging
 logging.basicConfig(
@@ -74,11 +69,7 @@ class VoiceCleaningPipeline:
                 "padding_duration_ms": 300,
                 "min_speech_duration_ms": 250,
             },
-            "deepfilternet": {"model": "DeepFilterNet3", "post_filter": True},
-            "silent_bed": {"fade_duration_ms": 20, "preserve_original_silence": True},
-            "adaptive_processing": {"enabled": True},
-            "restoration": {"enabled": True, "heavy_only": True},
-            "speech_blend": {"background_gain": 0.06, "energy_threshold": 0.015},
+            "deepfilternet": {"model": "DeepFilterNet3", "post_filter": True, "atten_lim_db": 100.0},
             "diarization": {"enabled": True, "min_speakers": 1, "max_speakers": 10},
             "asr": {"model": "base", "language": "en", "compute_type": "float16"},
             "output": {"format": "wav", "bit_depth": 16, "preserve_video": True},
@@ -111,16 +102,8 @@ class VoiceCleaningPipeline:
             double_pass=dfn_config.get("double_pass", False),
             model_name=dfn_config["model"],
             post_filter=dfn_config["post_filter"],
+            atten_lim_db=dfn_config.get("atten_lim_db", 100.0),
         )
-
-        # Silent bed transplant
-        sb_config = self.config["silent_bed"]
-        self.silent_bed = SilentBedTransplant(
-            fade_duration_ms=sb_config["fade_duration_ms"], sample_rate=self.sample_rate
-        )
-        self.profiler = AudioQualityProfiler(sample_rate=self.sample_rate)
-        self.router = AdaptiveRouter(sample_rate=self.sample_rate)
-        self.restorer = SpectralRestoration(sample_rate=self.sample_rate)
 
         # Diarization (optional)
         if self.config["diarization"]["enabled"]:
@@ -165,27 +148,6 @@ class VoiceCleaningPipeline:
                 merged.append((start, end))
 
         return merged
-
-    def _build_processing_segments(
-        self,
-        speech_segments: List[Tuple[int, int]],
-        diarization_results: List[Dict[str, Any]],
-        sr: int,
-        audio_length: int,
-    ) -> List[Tuple[int, int]]:
-        """Combine VAD and diarization spans into a single speech mask."""
-        segments: List[Tuple[int, int]] = list(speech_segments)
-
-        for seg in diarization_results:
-            start_sample = int(seg.get("start", 0.0) * sr)
-            end_sample = int(seg.get("end", 0.0) * sr)
-            if end_sample > start_sample:
-                segments.append((start_sample, end_sample))
-
-        if not segments:
-            segments = [(0, audio_length)]
-
-        return self._merge_segments(segments, audio_length)
 
     def process(
         self,
@@ -294,9 +256,76 @@ class VoiceCleaningPipeline:
         for start, end in speech_segments:
             clean_base[start:end] = audio[start:end]
 
-        # STEP 4: DeepFilterNet — remove remaining noise inside speech segments
-        logger.info("\nSTEP 4: DeepFilterNet noise removal on speech")
-        enhanced_audio = self.deepfilter.process_audio(clean_base, sr)
+        # STEP 4: Per-segment DeepFilterNet noise removal (optimised)
+        # Key speedups:
+        #   • Merge nearby segments (≤200 ms gap) → fewer model calls
+        #   • Pre-resample clean_base to 48 kHz once → eliminates N input resamples
+        #   • Collect all output in 48 kHz domain, resample back once at the end
+        logger.info("\nSTEP 4: Per-segment DeepFilterNet noise removal (optimised)")
+
+        import librosa as _lib
+
+        df_sr = self.deepfilter.sample_rate   # 48000
+
+        # ── Merge nearby segments to reduce total model calls ─────────────────
+        MERGE_GAP_MS = 200
+        gap_samples  = int(MERGE_GAP_MS / 1000 * sr)
+        if len(speech_segments) > 1:
+            proc_segs = [speech_segments[0]]
+            for seg_s, seg_e in speech_segments[1:]:
+                prev_s, prev_e = proc_segs[-1]
+                if seg_s - prev_e <= gap_samples:
+                    proc_segs[-1] = (prev_s, max(prev_e, seg_e))
+                else:
+                    proc_segs.append((seg_s, seg_e))
+        else:
+            proc_segs = list(speech_segments)
+        n_segs = len(proc_segs)
+        logger.info(
+            f"  {len(speech_segments)} diarization segments → "
+            f"{n_segs} processing segments (merged ≤{MERGE_GAP_MS}ms gaps)"
+        )
+
+        # ── Pre-resample clean_base once to DeepFilterNet's native SR ─────────
+        df_factor = df_sr / sr   # 3.0  (16 kHz → 48 kHz)
+        clean_df_in = (
+            _lib.resample(clean_base, orig_sr=sr, target_sr=df_sr)
+            if sr != df_sr else clean_base.copy()
+        )
+
+        n_df = int(np.ceil(len(clean_base) * df_factor))
+        enhanced_df = np.zeros(n_df, dtype=np.float32)
+
+        # ── Processing loop ───────────────────────────────────────────────────
+        for i, (start, end) in enumerate(proc_segs):
+            s_df_in = int(start * df_factor)
+            e_df_in = min(int(end * df_factor), len(clean_df_in))
+            seg_for_df = clean_df_in[s_df_in:e_df_in]
+
+            enh_seg = self.deepfilter.process_audio_native(seg_for_df)
+
+            # Write result into the 48 kHz output array
+            s_df     = int(start * df_factor)
+            e_df     = min(int(end * df_factor), n_df)
+            seg_len_df = e_df - s_df
+            enh_seg  = enh_seg[:seg_len_df]
+            if len(enh_seg) < seg_len_df:
+                enh_seg = np.pad(enh_seg, (0, seg_len_df - len(enh_seg)))
+            enhanced_df[s_df:e_df] = enh_seg
+
+            if (i + 1) % 10 == 0 or (i + 1) == n_segs:
+                logger.info(f"  Segment {i+1}/{n_segs} done")
+
+        # ── Single post-loop resample back to pipeline SR ─────────────────────
+        if df_sr != sr:
+            enhanced_audio = _lib.resample(enhanced_df, orig_sr=df_sr, target_sr=sr)
+        else:
+            enhanced_audio = enhanced_df
+
+        # Clip/pad to exact original length (resampling may drift ±1 sample)
+        enhanced_audio = enhanced_audio[:len(clean_base)].astype(np.float32)
+        if len(enhanced_audio) < len(clean_base):
+            enhanced_audio = np.pad(enhanced_audio, (0, len(clean_base) - len(enhanced_audio)))
 
         # STEP 5: Re-apply zero outside speech so DeepFilterNet output bleed is gone
         # Apply 10ms cosine fades at segment edges to avoid clicks.
@@ -480,21 +509,6 @@ class VoiceCleaningPipeline:
                 logger.warning(f"Failed to cache results: {e}")
 
         return results
-
-    @staticmethod
-    def _invert_segments(
-        speech_segments: List[Tuple[int, int]], total_length: int
-    ) -> List[Tuple[int, int]]:
-        """Return the gaps (non-speech) between speech segments."""
-        gaps: List[Tuple[int, int]] = []
-        prev_end = 0
-        for start, end in sorted(speech_segments):
-            if start > prev_end:
-                gaps.append((prev_end, start))
-            prev_end = max(prev_end, end)
-        if prev_end < total_length:
-            gaps.append((prev_end, total_length))
-        return gaps
 
     def process_batch(
         self,

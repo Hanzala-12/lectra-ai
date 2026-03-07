@@ -1,4 +1,4 @@
-"""
+﻿"""
 DeepFilterNet Noise Reduction Module
 Processes speech chunks to remove background noise
 """
@@ -19,6 +19,7 @@ class DeepFilterProcessor:
         model_name: str = "DeepFilterNet3",
         post_filter: bool = True,
         double_pass: bool = False,
+        atten_lim_db: float = 100.0,
         device: str = None,
     ):
         """
@@ -26,11 +27,14 @@ class DeepFilterProcessor:
             model_name: Model to use (DeepFilterNet2 or DeepFilterNet3)
             post_filter: Enable additional post-processing
             double_pass: Run enhancement twice for stubborn noise (costs 2x DeepFilter time)
+            atten_lim_db: Max noise attenuation in dB. 100 = unlimited (most aggressive).
+                          Lower values (e.g. 6) are conservative and let noise through.
             device: torch device (cuda/cpu), auto-detected if None
         """
         self.model_name = model_name
         self.post_filter = post_filter
         self.double_pass = double_pass
+        self.atten_lim_db = atten_lim_db
 
         # Auto-detect device
         if device is None:
@@ -98,10 +102,10 @@ class DeepFilterProcessor:
         # Convert to torch tensor
         audio_tensor = torch.from_numpy(audio).unsqueeze(0).to(self.device)
 
-        # Pass 1: enhance full audio — atten_lim_db=0 = no cap on noise attenuation
+        # Pass 1: enhance — atten_lim_db=100 allows up to 100dB of attenuation (fully aggressive)
         with torch.no_grad():
             enhanced = self.enhance(
-                self.model, self.df_state, audio_tensor, atten_lim_db=0
+                self.model, self.df_state, audio_tensor, atten_lim_db=self.atten_lim_db
             )
 
         # Pass 2 (optional): re-run on the already-cleaned output to scrub residual noise
@@ -109,7 +113,7 @@ class DeepFilterProcessor:
             logger.info("Double-pass: running second enhancement pass")
             with torch.no_grad():
                 enhanced = self.enhance(
-                    self.model, self.df_state, enhanced, atten_lim_db=0
+                    self.model, self.df_state, enhanced, atten_lim_db=self.atten_lim_db
                 )
 
         # Convert back to numpy
@@ -121,8 +125,28 @@ class DeepFilterProcessor:
                 enhanced_audio, orig_sr=self.sample_rate, target_sr=sr
             )
 
-        logger.info("Audio enhancement completed")
+        logger.debug("Audio enhancement completed")
         return enhanced_audio
+
+    def process_audio_native(self, audio: np.ndarray) -> np.ndarray:
+        """
+        Process audio that is ALREADY at the model's native sample rate (48 kHz).
+        Skips all resampling — faster when the caller pre-resamples the whole file.
+        """
+        audio_tensor = torch.from_numpy(audio.astype(np.float32)).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            enhanced = self.enhance(
+                self.model, self.df_state, audio_tensor, atten_lim_db=self.atten_lim_db
+            )
+
+        if self.double_pass:
+            with torch.no_grad():
+                enhanced = self.enhance(
+                    self.model, self.df_state, enhanced, atten_lim_db=self.atten_lim_db
+                )
+
+        return enhanced.cpu().numpy().squeeze().astype(np.float32)
 
     def process_segments(
         self, audio: np.ndarray, sr: int, segments: List[Tuple[int, int]]

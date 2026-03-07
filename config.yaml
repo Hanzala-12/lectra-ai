@@ -14,22 +14,9 @@ vad:
 deepfilternet:
   model: "DeepFilterNet3"  # DeepFilterNet2 or DeepFilterNet3
   post_filter: true  # additional post-processing
-  
-silent_bed:
-  fade_duration_ms: 20  # crossfade duration for transplant
-  preserve_original_silence: true  # keep original silent portions
+  atten_lim_db: 100  # max noise attenuation in dB — 100 = fully aggressive (no safety brakes)
+  double_pass: false  # run DeepFilterNet twice — 2nd pass scrubs residual overlapping noise
 
-adaptive_processing:
-  enabled: true  # route clean clips to lighter DSP and noisy clips to DeepFilterNet
-
-restoration:
-  enabled: true  # restore speech brightness after stronger denoising
-  heavy_only: true  # only restore after the heavy path is selected
-
-speech_blend:
-  background_gain: 0.0  # 0 = pure silence outside speech segments
-  energy_threshold: 0.015  # lower = stronger use of original bed in low-energy speech pockets
-  
 diarization:
   enabled: true
   min_speakers: 1
