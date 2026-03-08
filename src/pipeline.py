@@ -69,7 +69,11 @@ class VoiceCleaningPipeline:
                 "padding_duration_ms": 300,
                 "min_speech_duration_ms": 250,
             },
-            "deepfilternet": {"model": "DeepFilterNet3", "post_filter": True, "atten_lim_db": 100.0},
+            "deepfilternet": {
+                "model": "DeepFilterNet3",
+                "post_filter": True,
+                "atten_lim_db": 100.0,
+            },
             "diarization": {"enabled": True, "min_speakers": 1, "max_speakers": 10},
             "asr": {"model": "base", "language": "en", "compute_type": "float16"},
             "output": {"format": "wav", "bit_depth": 16, "preserve_video": True},
@@ -216,11 +220,14 @@ class VoiceCleaningPipeline:
         # STEP 1: Load media
         logger.info("STEP 1: Loading media")
         audio, sr, is_video = self.media_loader.load_media(input_path)
-        logger.info(f"Loaded {len(audio)/sr:.2f}s from {'video' if is_video else 'audio'}")
+        logger.info(
+            f"Loaded {len(audio)/sr:.2f}s from {'video' if is_video else 'audio'}"
+        )
 
         # STEP 2: Diarize — find who speaks when
         logger.info("\nSTEP 2: Diarizing — finding speaker segments")
         import soundfile as sf
+
         temp_audio_path = output_dir / f"{input_name}_temp.wav"
         sf.write(str(temp_audio_path), audio, sr)
 
@@ -230,7 +237,9 @@ class VoiceCleaningPipeline:
                 diarization_results = self.diarization.diarize(str(temp_audio_path))
                 if diarization_results:
                     stats = self.diarization.get_speaker_statistics(diarization_results)
-                    logger.info(f"Identified {len(stats)} speaker(s), {len(diarization_results)} segments")
+                    logger.info(
+                        f"Identified {len(stats)} speaker(s), {len(diarization_results)} segments"
+                    )
             except Exception as e:
                 logger.warning(f"Diarization failed, falling back to VAD: {e}")
 
@@ -265,11 +274,11 @@ class VoiceCleaningPipeline:
 
         import librosa as _lib
 
-        df_sr = self.deepfilter.sample_rate   # 48000
+        df_sr = self.deepfilter.sample_rate  # 48000
 
         # ── Merge nearby segments to reduce total model calls ─────────────────
         MERGE_GAP_MS = 200
-        gap_samples  = int(MERGE_GAP_MS / 1000 * sr)
+        gap_samples = int(MERGE_GAP_MS / 1000 * sr)
         if len(speech_segments) > 1:
             proc_segs = [speech_segments[0]]
             for seg_s, seg_e in speech_segments[1:]:
@@ -287,10 +296,11 @@ class VoiceCleaningPipeline:
         )
 
         # ── Pre-resample clean_base once to DeepFilterNet's native SR ─────────
-        df_factor = df_sr / sr   # 3.0  (16 kHz → 48 kHz)
+        df_factor = df_sr / sr  # 3.0  (16 kHz → 48 kHz)
         clean_df_in = (
             _lib.resample(clean_base, orig_sr=sr, target_sr=df_sr)
-            if sr != df_sr else clean_base.copy()
+            if sr != df_sr
+            else clean_base.copy()
         )
 
         n_df = int(np.ceil(len(clean_base) * df_factor))
@@ -305,10 +315,10 @@ class VoiceCleaningPipeline:
             enh_seg = self.deepfilter.process_audio_native(seg_for_df)
 
             # Write result into the 48 kHz output array
-            s_df     = int(start * df_factor)
-            e_df     = min(int(end * df_factor), n_df)
+            s_df = int(start * df_factor)
+            e_df = min(int(end * df_factor), n_df)
             seg_len_df = e_df - s_df
-            enh_seg  = enh_seg[:seg_len_df]
+            enh_seg = enh_seg[:seg_len_df]
             if len(enh_seg) < seg_len_df:
                 enh_seg = np.pad(enh_seg, (0, seg_len_df - len(enh_seg)))
             enhanced_df[s_df:e_df] = enh_seg
@@ -323,9 +333,11 @@ class VoiceCleaningPipeline:
             enhanced_audio = enhanced_df
 
         # Clip/pad to exact original length (resampling may drift ±1 sample)
-        enhanced_audio = enhanced_audio[:len(clean_base)].astype(np.float32)
+        enhanced_audio = enhanced_audio[: len(clean_base)].astype(np.float32)
         if len(enhanced_audio) < len(clean_base):
-            enhanced_audio = np.pad(enhanced_audio, (0, len(clean_base) - len(enhanced_audio)))
+            enhanced_audio = np.pad(
+                enhanced_audio, (0, len(clean_base) - len(enhanced_audio))
+            )
 
         # STEP 5: Re-apply zero outside speech so DeepFilterNet output bleed is gone
         # Apply 10ms cosine fades at segment edges to avoid clicks.
@@ -353,8 +365,11 @@ class VoiceCleaningPipeline:
         bit_depth = self.config["output"]["bit_depth"]
         audio_output_path = output_dir / f"{input_name}_cleaned.{output_format}"
         self.media_loader.save_audio(
-            final_audio, sr, str(audio_output_path),
-            format=output_format, bit_depth=bit_depth,
+            final_audio,
+            sr,
+            str(audio_output_path),
+            format=output_format,
+            bit_depth=bit_depth,
         )
 
         # Clean up temp file

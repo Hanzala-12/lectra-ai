@@ -35,14 +35,9 @@ jobs:
         python -c "import setuptools; print('setuptools:', setuptools.__version__)"
         python -c "import webrtcvad; print('webrtcvad: OK')"
     
-    - name: Lint with flake8
+    - name: Run pre-commit checks (black + flake8)
       run: |
-        flake8 src/ backend.py --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 src/ backend.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    
-    - name: Format check with black
-      run: |
-        black --check src/ backend.py
+        pre-commit run --all-files
     
     - name: Run tests
       run: |

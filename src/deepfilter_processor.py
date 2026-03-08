@@ -133,7 +133,9 @@ class DeepFilterProcessor:
         Process audio that is ALREADY at the model's native sample rate (48 kHz).
         Skips all resampling — faster when the caller pre-resamples the whole file.
         """
-        audio_tensor = torch.from_numpy(audio.astype(np.float32)).unsqueeze(0).to(self.device)
+        audio_tensor = (
+            torch.from_numpy(audio.astype(np.float32)).unsqueeze(0).to(self.device)
+        )
 
         with torch.no_grad():
             enhanced = self.enhance(

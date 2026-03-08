@@ -65,9 +65,9 @@ async def lifespan(app: FastAPI):
         logger.info("Pipeline pre-warmed successfully — ready to process requests")
     except Exception as e:
         logger.error(f"Pipeline pre-warm failed: {e} — will retry on first request")
-    
+
     yield
-    
+
     # Shutdown (if needed)
     logger.info("Server shutdown")
 
@@ -134,6 +134,7 @@ def initialize_pipeline(config: ProcessingConfig):
 
     if pipeline is None:
         import yaml as _yaml
+
         with open("config.yaml") as _f:
             _cfg = _yaml.safe_load(_f)
         _cache_enabled = _cfg.get("cache", {}).get("enabled", False)
