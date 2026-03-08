@@ -8,11 +8,12 @@ import sys
 import os
 
 # Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from backend import app
 
 client = TestClient(app)
+
 
 def test_root_endpoint():
     """Test API root"""
@@ -20,6 +21,7 @@ def test_root_endpoint():
     assert response.status_code == 200
     assert "name" in response.json()
     assert response.json()["status"] == "running"
+
 
 def test_health_endpoint():
     """Test health check"""
@@ -31,6 +33,7 @@ def test_health_endpoint():
     assert "version" in data
     assert "timestamp" in data
 
+
 def test_models_endpoint():
     """Test models list endpoint"""
     response = client.get("/api/models")
@@ -40,19 +43,22 @@ def test_models_endpoint():
     assert "transcript_formats" in data
     assert len(data["whisper_models"]) > 0
 
+
 def test_invalid_file_type():
     """Test uploading invalid file type"""
     response = client.post(
         "/api/process",
         files={"file": ("test.txt", b"not an audio file", "text/plain")},
-        data={"whisper_model": "base"}
+        data={"whisper_model": "base"},
     )
     assert response.status_code == 400
+
 
 def test_invalid_whisper_model():
     """Test invalid model name"""
     # This would need a valid audio file
     # Skipping actual file processing in unit tests
     pass
+
 
 # Add more API tests
