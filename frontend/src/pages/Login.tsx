@@ -140,11 +140,6 @@ export function Login() {
                 </form>
               </div>
             </div>
-
-            {/* Floating Floating Elements around the card to enhance 3D effect */}
-            <div className="absolute -top-10 -right-10 w-24 h-24 bg-accent/20 rounded-2xl backdrop-blur-md border border-white/10 flex items-center justify-center animate-bounce" style={{ animationDuration: '4s', transform: 'translateZ(60px)' }}>
-              <Play className="w-8 h-8 text-accent" />
-            </div>
           </div>
         </div>
       </div>

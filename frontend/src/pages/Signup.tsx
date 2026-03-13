@@ -124,11 +124,6 @@ export function Signup() {
                 </form>
               </div>
             </div>
-
-            {/* Floating Elements around the card */}
-            <div className="absolute -bottom-8 -left-8 w-20 h-20 bg-accent2/20 rounded-2xl backdrop-blur-md border border-white/10 flex items-center justify-center animate-bounce" style={{ animationDuration: '5s', transform: 'translateZ(50px)' }}>
-              <BookOpen className="w-7 h-7 text-accent2" />
-            </div>
           </div>
         </div>
 
