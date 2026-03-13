@@ -159,24 +159,9 @@ export function App() {
             <Settings className="w-4 h-4 text-accent2" />
             Processing Settings
           </h3>
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-2">Whisper Model</label>
-              <select
-                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
-                value={whisperModel}
-                onChange={(e) => setWhisperModel(e.target.value)}
-              >
-                <option value="base">Base (Fast, Good accuracy)</option>
-                <option value="small">Small (Slower, Better accuracy)</option>
-                <option value="medium">Medium (Slowest, Best accuracy)</option>
-                <option value="large">Large (Highest accuracy)</option>
-                <option value="turbo">Turbo (Recommended)</option>
-              </select>
-              <p className="text-xs text-muted mt-2">Larger models take longer but produce fewer errors.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Speaker Diarization</label>
+              <label className="block text-sm font-medium mb-2">Identify Speakers</label>
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"

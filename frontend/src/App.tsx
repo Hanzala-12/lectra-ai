@@ -9,9 +9,8 @@ import { AppLayout } from './components/AppLayout';
 import { Home } from './pages/Home';
 import { App as DemoApp } from './pages/App';
 import { Features } from './pages/Features';
-import { Pricing } from './pages/Pricing';
 import { Docs } from './pages/Docs';
-import { Blog } from './pages/Blog';
+import { About } from './pages/About';
 import { Dashboard } from './pages/Dashboard';
 import { Library } from './pages/Library';
 import { Quiz } from './pages/Quiz';
@@ -36,13 +35,11 @@ export default function App() {
           </Route>
           
           <Route path="features" element={<Features />} />
-          <Route path="pricing" element={<Pricing />} />
           <Route path="docs" element={<Docs />} />
-          <Route path="blog" element={<Blog />} />
+          <Route path="about" element={<About />} />
           
           {/* Placeholders for other routes */}
           <Route path="use-cases" element={<div className="p-24 text-center text-xl">Use Cases Page</div>} />
-          <Route path="about" element={<div className="p-24 text-center text-xl">About Page</div>} />
           <Route path="privacy" element={<div className="p-24 text-center text-xl">Privacy Policy</div>} />
           <Route path="terms" element={<div className="p-24 text-center text-xl">Terms of Service</div>} />
           

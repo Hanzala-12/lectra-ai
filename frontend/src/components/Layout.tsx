@@ -36,22 +36,21 @@ export function Layout() {
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-8">
-            <Link to="/features" className="text-sm font-medium text-muted hover:text-text transition-colors">Features</Link>
-            <Link to="/app/dashboard" className="text-sm font-medium text-muted hover:text-text transition-colors">How It Works</Link>
-            <Link to="/pricing" className="text-sm font-medium text-muted hover:text-text transition-colors">Pricing</Link>
-            <Link to="/blog" className="text-sm font-medium text-muted hover:text-text transition-colors">Blog</Link>
+            <Link to="/features" className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300">Features</Link>
+            <Link to="/app/dashboard" className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300">How It Works</Link>
+            <Link to="/about" className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300">About Us</Link>
           </nav>
 
           <div className="hidden md:flex items-center gap-4">
             <Link
               to="/app/dashboard"
-              className="text-sm font-medium text-muted hover:text-text transition-colors px-4 py-2"
+              className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300 px-4 py-2"
             >
               Sign In
             </Link>
             <Link
               to="/app/upload"
-              className="text-sm font-bold bg-accent hover:bg-accent2 text-white px-5 py-2.5 rounded-lg transition-colors shadow-sm"
+              className="text-sm font-bold bg-accent hover:bg-accent2 text-white px-5 py-2.5 rounded-lg transition-all duration-300 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
             >
               Try Free
             </Link>
@@ -68,11 +67,10 @@ export function Layout() {
 
         {/* Mobile Nav */}
         {mobileMenuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-surface border-b border-border p-6 flex flex-col gap-4 shadow-xl">
-            <Link to="/features" className="text-lg font-medium" onClick={() => setMobileMenuOpen(false)}>Features</Link>
-            <Link to="/app/dashboard" className="text-lg font-medium" onClick={() => setMobileMenuOpen(false)}>How It Works</Link>
-            <Link to="/pricing" className="text-lg font-medium" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
-            <Link to="/blog" className="text-lg font-medium" onClick={() => setMobileMenuOpen(false)}>Blog</Link>
+          <div className="md:hidden absolute top-full left-0 right-0 bg-surface border-b border-border p-6 flex flex-col gap-4 shadow-xl transition-all duration-300">
+            <Link to="/features" className="text-lg font-medium hover:text-accent transition-colors" onClick={() => setMobileMenuOpen(false)}>Features</Link>
+            <Link to="/app/dashboard" className="text-lg font-medium hover:text-accent transition-colors" onClick={() => setMobileMenuOpen(false)}>How It Works</Link>
+            <Link to="/about" className="text-lg font-medium hover:text-accent transition-colors" onClick={() => setMobileMenuOpen(false)}>About Us</Link>
             <div className="h-px bg-border my-2" />
             <Link
               to="/app/dashboard"
@@ -144,7 +142,7 @@ export function Layout() {
               <h4 className="font-mono text-xs uppercase tracking-widest text-white/60 mb-6">Company</h4>
               <ul className="flex flex-col gap-3">
                 <li><Link to="/about" className="text-sm hover:text-white transition-colors">Team</Link></li>
-                <li><Link to="/blog" className="text-sm hover:text-white transition-colors">Blog</Link></li>
+                <li><Link to="/about" className="text-sm hover:text-white transition-colors">About Us</Link></li>
                 <li><Link to="/privacy" className="text-sm hover:text-white transition-colors">Privacy</Link></li>
                 <li><Link to="/terms" className="text-sm hover:text-white transition-colors">Terms</Link></li>
               </ul>

@@ -10,7 +10,7 @@ export function Home() {
         <div className="absolute bottom-[-100px] left-[-100px] w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(14,138,110,0.08)_0%,transparent_70%)] pointer-events-none" />
         
         <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
-          <div className="z-10">
+          <div className="z-10 animate-in fade-in slide-in-from-bottom-8 duration-700 ease-out fill-mode-both">
             <h1 className="font-display text-5xl md:text-7xl leading-[1.1] tracking-tight mb-6">
               Your lecture.<br />
               <em className="text-accent2 not-italic">Transcribed, explained, quizzed.</em>
@@ -23,14 +23,14 @@ export function Home() {
             <div className="flex flex-col sm:flex-row items-center gap-4 mb-8">
               <Link
                 to="/app/upload"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-accent hover:bg-accent2 text-white px-8 py-4 rounded-xl font-bold transition-all shadow-sm hover:-translate-y-0.5"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-accent hover:bg-accent2 text-white px-8 py-4 rounded-xl font-bold transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1"
               >
                 <UploadCloud className="w-5 h-5" />
                 Upload a Lecture
               </Link>
               <a
                 href="#demo"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-surface2 hover:bg-surface border border-border hover:border-border2 text-text px-8 py-4 rounded-xl font-medium transition-all"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-surface2 hover:bg-surface border border-border hover:border-border2 text-text px-8 py-4 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-1"
               >
                 See How It Works
               </a>
@@ -92,18 +92,17 @@ export function Home() {
 
       {/* Trust Strip */}
       <section className="border-y border-border bg-surface py-8">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-center gap-12">
-          <span className="text-xs font-mono uppercase tracking-widest text-muted">Powered By</span>
-          <div className="flex items-center gap-8 opacity-60 grayscale">
-            <div className="font-bold text-lg">Whisper</div>
-            <div className="font-bold text-lg">pyannote</div>
-            <div className="font-bold text-lg">DeepFilterNet</div>
-            <div className="font-bold text-lg">RAG</div>
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-center gap-12 hover:opacity-100 transition-opacity duration-500">
+          <span className="text-xs font-mono uppercase tracking-widest text-muted">A NUCES CFD Project</span>
+          <div className="flex items-center gap-8 opacity-60">
+            <div className="font-bold text-lg">AI Audio Processing</div>
+            <div className="font-bold text-lg">Smart Diarization</div>
+            <div className="font-bold text-lg">Noise Suppression</div>
           </div>
           <div className="hidden md:block w-px h-8 bg-border" />
-          <div className="flex items-center gap-2 opacity-80">
-            <GraduationCap className="w-5 h-5 text-accent" />
-            <span className="font-bold text-sm">NUCES CFD</span>
+          <div className="flex items-center gap-2 opacity-80 group hover:opacity-100 transition-opacity duration-300">
+            <GraduationCap className="w-5 h-5 text-accent group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-sm tracking-wide">University Grade</span>
           </div>
         </div>
       </section>
