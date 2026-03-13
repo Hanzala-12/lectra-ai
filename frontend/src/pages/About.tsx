@@ -44,7 +44,7 @@ export function About() {
         </div>
       </section>
 
-      {/* Team Section */}
+      {/* Leadership & Team Section */}
       <section className="py-20 bg-surface/30">
         <div className="max-w-7xl mx-auto px-6">
           <div className="mb-16">
@@ -54,6 +54,37 @@ export function About() {
             </p>
           </div>
 
+          {/* Supervisor Card */}
+          <div className="mb-16">
+            <h3 className="text-sm font-mono uppercase tracking-widest text-muted mb-6">Project Supervisor</h3>
+            <div className="bg-surface border border-border p-8 rounded-2xl hover:border-accent/50 transition-all duration-300 hover:shadow-lg flex flex-col md:flex-row gap-8 items-center md:items-start group">
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-2xl overflow-hidden shrink-0 bg-accent/10 border border-border group-hover:scale-105 transition-transform duration-500 relative">
+                <img 
+                  src="/umer.jpg" 
+                  alt="M. Umer Iqbal" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = "https://ui-avatars.com/api/?name=Umer+Iqbal&size=200&background=random"; // Fallback if image not found
+                  }}
+                />
+              </div>
+              <div>
+                <h3 className="text-3xl font-bold mb-2">M. Umer Iqbal</h3>
+                <div className="text-accent font-semibold tracking-wide uppercase mb-4 mb-2">Lecturer, School of Computing (CFD Campus)</div>
+                <p className="text-muted leading-relaxed text-lg max-w-3xl mb-6">
+                  An expert in Evolutionary Algorithms, Computational Optimization, and Requirement Engineering with a distinguished MS(CS) from FAST-NUCES. He provides invaluable mentorship, academic direction, and industry insights for the Lectra-AI project.
+                </p>
+                <div className="flex items-center gap-4">
+                  <a href="https://scholar.google.com/citations?user=zmYMwvgAAAAJ&hl=en" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium text-text bg-bg border border-border px-4 py-2 rounded-lg hover:border-accent transition-colors">
+                    Google Scholar <ArrowRight className="w-4 h-4" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <h3 className="text-sm font-mono uppercase tracking-widest text-muted mb-6">Core Development Team</h3>
           <div className="grid md:grid-cols-3 gap-8">
             {team.map((member, idx) => (
               <div key={idx} className="bg-surface border border-border p-8 rounded-2xl hover:border-accent/50 transition-all duration-300 hover:shadow-lg group">
