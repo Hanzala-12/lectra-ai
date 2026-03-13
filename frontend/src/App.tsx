@@ -12,6 +12,7 @@ import { Features } from './pages/Features';
 import { Docs } from './pages/Docs';
 import { About } from './pages/About';
 import { Login } from './pages/Login';
+import { Signup } from './pages/Signup';
 import { Dashboard } from './pages/Dashboard';
 import { Library } from './pages/Library';
 import { Quiz } from './pages/Quiz';
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="docs" element={<Docs />} />
           <Route path="about" element={<About />} />
           <Route path="login" element={<Login />} />
+          <Route path="signup" element={<Signup />} />
           
           {/* Placeholders for other routes */}
           <Route path="use-cases" element={<div className="p-24 text-center text-xl">Use Cases Page</div>} />

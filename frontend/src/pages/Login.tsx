@@ -16,8 +16,9 @@ export function Login() {
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     
-    const rotateX = ((y - centerY) / centerY) * -15; // Max 15 degree rotation
-    const rotateY = ((x - centerX) / centerX) * 15;
+    // Reduced tilt intensity from 15 to 5 for a more subtle, natural feel
+    const rotateX = ((y - centerY) / centerY) * -5; 
+    const rotateY = ((x - centerX) / centerX) * 5;
     
     setRotation({ x: rotateX, y: rotateY });
   };
@@ -132,9 +133,9 @@ export function Login() {
 
                   <div className="mt-8 text-center text-sm text-muted">
                     Don't have an account?{' '}
-                    <a href="#" className="font-bold text-accent hover:text-accent2 transition-colors">
+                    <Link to="/signup" className="font-bold text-accent hover:text-accent2 transition-colors">
                       Sign up for free
-                    </a>
+                    </Link>
                   </div>
                 </form>
               </div>
