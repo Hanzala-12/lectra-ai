@@ -1,0 +1,25 @@
+PROJECT ARCHITECTURE SUMMARY
+============================
+
+1) FRONTEND LANGUAGE / STACK
+- Primary language: TypeScript
+- Framework/library: React (Vite-based frontend)
+- Styling: CSS with Tailwind setup in the new frontend
+
+2) BACKEND LANGUAGE / STACK
+- Primary language: Python
+- Framework: FastAPI
+- Core backend modules are implemented in Python for audio processing, ASR, and diarization workflow.
+
+3) DATABASE PLAN
+- Database to be used: Supabase
+- Note: Supabase is documented here as the intended database platform for project data/storage needs.
+
+4) PROGRAMMING APPROACH USED IN THIS PROJECT
+- Main approach: Object-Oriented Programming (OOP)
+  - The backend is structured around classes (for example, pipeline and processor classes) and class methods.
+- Also used: Procedural orchestration in some flow/controller code
+  - Some parts (such as endpoint flow and execution sequencing) are written in a procedural style.
+
+Conclusion:
+This project uses a hybrid style, but it is primarily OOP on the backend, with procedural flow where appropriate.
