@@ -43,7 +43,7 @@ export function Layout() {
 
           <div className="hidden md:flex items-center gap-4">
             <Link
-              to="/app/dashboard"
+              to="/login"
               className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300 px-4 py-2"
             >
               Sign In
