@@ -16,9 +16,9 @@ export function Signup() {
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
     
-    // Subtle tilt for a more natural feel
-    const rotateX = ((y - centerY) / centerY) * -5; 
-    const rotateY = ((x - centerX) / centerX) * 5;
+    // Subtle tilt for a more natural feel. Reduced further to 3 to match the visual feel of the shorter Login box.
+    const rotateX = ((y - centerY) / centerY) * -3; 
+    const rotateY = ((x - centerX) / centerX) * 3;
     
     setRotation({ x: rotateX, y: rotateY });
   };
