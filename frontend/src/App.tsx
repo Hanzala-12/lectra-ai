@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AppLayout } from './components/AppLayout';
@@ -18,6 +19,7 @@ import { Library } from './pages/Library';
 import { Quiz } from './pages/Quiz';
 import { Analytics } from './pages/Analytics';
 import { Chat } from './pages/Chat';
+import { NotFound } from './pages/NotFound';
 
 export default function App() {
   return (
@@ -47,9 +49,10 @@ export default function App() {
           <Route path="privacy" element={<div className="p-24 text-center text-xl">Privacy Policy</div>} />
           <Route path="terms" element={<div className="p-24 text-center text-xl">Terms of Service</div>} />
           
-          <Route path="*" element={<div className="p-24 text-center text-xl">404 Not Found</div>} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </BrowserRouter>
   );
 }
+

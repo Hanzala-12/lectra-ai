@@ -1,33 +1,38 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-ui: 'Plus Jakarta Sans', sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
-  --color-bg: #f5f3ee;
+  --color-bg: #fafafa;
   --color-surface: #ffffff;
-  --color-surface2: #f0ede6;
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-border2: rgba(0, 0, 0, 0.14);
-  --color-text: #1a1814;
-  --color-muted: #6b6760;
-  --color-accent: #1a5c8f;
-  --color-accent2: #2878b5;
-  --color-accent-light: #dbeaf5;
-  --color-teal: #0e8a6e;
-  --color-teal-light: #d4f0e8;
-  --color-red: #c0392b;
-  --color-red-light: #fce8e6;
-  --color-amber: #b8730a;
-  --color-amber-light: #fef3dc;
-  --color-purple: #6b3fa0;
-  --color-purple-light: #ede6f8;
+  --color-surface2: #f4f4f5;
+  --color-border: #e4e4e7;
+  --color-border2: #d4d4d8;
+  --color-text: #09090b;
+  --color-muted: #71717a;
+  
+  --color-accent: #000000;
+  --color-accent2: #27272a;
+  --color-accent-light: #f4f4f5;
+  
+  --color-primary: #2563eb;
+  --color-primary-light: #eff6ff;
+  --color-primary-dark: #1d4ed8;
+  
+  --color-success: #16a34a;
+  --color-success-light: #f0fdf4;
+  
+  --color-error: #dc2626;
+  --color-error-light: #fef2f2;
+  
+  --color-warning: #d97706;
+  --color-warning-light: #fffbeb;
 }
 
 @layer base {
   body {
-    @apply bg-bg text-text font-ui antialiased selection:bg-accent/30 selection:text-text;
+    @apply bg-bg text-text font-sans antialiased selection:bg-primary/20 selection:text-primary;
   }
 }

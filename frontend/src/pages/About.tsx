@@ -75,18 +75,18 @@ export function About() {
     <div className="min-h-screen bg-bg">
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-accent/5 to-transparent pointer-events-none" />
-        <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-accent/10 to-transparent blur-3xl rounded-full opacity-50 transform translate-x-1/2 -translate-y-1/4 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none" />
+        <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-primary/10 to-transparent blur-3xl rounded-full opacity-50 transform translate-x-1/2 -translate-y-1/4 pointer-events-none" />
         
         <div className="max-w-7xl mx-auto px-6 relative">
           <FadeIn className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6 border border-primary/20">
               <BrainCircuit className="w-4 h-4" />
               Revolutionizing Audio Intelligence
             </div>
-            <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tight mb-8">
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8">
               Pioneering the Future of <br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-accent2">Applied Sound AI</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">Applied Sound AI</span>
             </h1>
             <p className="text-xl text-muted leading-relaxed mb-10">
               Lectra-AI is engineered to bridge the gap between noisy environments and crystal-clear understanding. We build enterprise-grade audio enhancement and structural transcribing explicitly tailored for complex, real-world acoustic scenarios.
@@ -100,7 +100,7 @@ export function About() {
         <div className="max-w-7xl mx-auto px-6">
           <FadeIn direction="up">
             <div className="mb-20 text-center max-w-3xl mx-auto">
-              <h2 className="text-4xl font-display font-bold mb-6">The Minds Behind Lectra-AI</h2>
+              <h2 className="text-4xl font-bold tracking-tight mb-6">The Minds Behind Lectra-AI</h2>
               <p className="text-muted text-lg">
                 Our team represents a convergence of academic excellence and top-tier computing engineering from NUCES CFD, dedicated to pushing the boundaries of applied machine learning.
               </p>
@@ -113,17 +113,17 @@ export function About() {
               {/* Text Side (Left) */}
               <div className="flex-1 order-2 lg:order-1">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="h-px w-8 bg-accent"></div>
-                  <span className="text-sm font-mono uppercase tracking-widest text-accent">Academic Leadership</span>
+                  <div className="h-px w-8 bg-primary"></div>
+                  <span className="text-sm font-mono uppercase tracking-widest text-primary">Academic Leadership</span>
                 </div>
-                <h3 className="text-4xl font-bold mb-2">M. Umer Iqbal</h3>
+                <h3 className="text-4xl font-bold mb-2 tracking-tight">M. Umer Iqbal</h3>
                 <div className="text-muted font-medium text-lg tracking-wide mb-6">Project Supervisor & Lecturer, NUCES CFD</div>
                 
                 <p className="text-text/80 leading-relaxed text-lg mb-8">
                   An expert in Evolutionary Algorithms, Computational Optimization, and Requirement Engineering with a distinguished MS(CS) from FAST-NUCES. Sir Umer Iqbal provides the strategic vision, rigorous academic constraints, and crucial industry insights that steer the Lectra-AI platform toward scalable, enterprise-ready solutions.
                 </p>
                 
-                <a href="https://scholar.google.com/citations?user=zmYMwvgAAAAJ&hl=en" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 font-medium text-bg bg-text px-6 py-3 rounded-lg hover:bg-accent hover:text-white transition-all duration-300">
+                <a href="https://scholar.google.com/citations?user=zmYMwvgAAAAJ&hl=en" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 font-medium text-white bg-primary px-6 py-3 rounded-lg hover:bg-primary-dark transition-all duration-300 shadow-sm">
                   <BookOpen className="w-4 h-4" />
                   View Research Publications
                 </a>
@@ -132,12 +132,12 @@ export function About() {
               {/* Image Side (Right) */}
               <div className="flex-1 order-1 lg:order-2 w-full">
                 <div className="relative aspect-square max-w-md ml-auto">
-                  <div className="absolute inset-0 bg-gradient-to-tr from-accent to-accent2 rounded-3xl transform rotate-3 scale-105 opacity-20 blur-lg"></div>
-                  <div className="w-full h-full rounded-3xl overflow-hidden bg-surface border border-border relative z-10 shadow-2xl">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-primary to-accent rounded-3xl transform rotate-3 scale-105 opacity-20 blur-lg"></div>
+                  <div className="w-full h-full rounded-3xl overflow-hidden bg-surface border border-border relative z-10 shadow-xl">
                     <img 
                       src="/supervisor.jpg" 
                       alt="M. Umer Iqbal" 
-                      className="w-full h-full object-cover transition-transform duration-700 hover:scale-110"
+                      className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.src = "https://ui-avatars.com/api/?name=Umer+Iqbal&size=800&background=random";
@@ -151,7 +151,7 @@ export function About() {
 
           <FadeIn direction="up">
             <div className="flex items-center gap-4 mb-16">
-              <h3 className="text-3xl font-display font-bold">Core Development Team</h3>
+              <h3 className="text-3xl font-bold tracking-tight">Core Development Team</h3>
               <div className="flex-1 h-px bg-gradient-to-r from-border to-transparent"></div>
             </div>
           </FadeIn>
@@ -165,7 +165,7 @@ export function About() {
                     
                     {/* Image Side */}
                     <div className="w-full md:w-5/12 lg:w-1/3">
-                      <div className="aspect-square rounded-3xl overflow-hidden bg-surface border border-border shadow-xl group">
+                      <div className="aspect-square rounded-3xl overflow-hidden bg-surface border border-border shadow-md group">
                         <img 
                           src={member.image} 
                           alt={member.name}
@@ -176,8 +176,8 @@ export function About() {
                     
                     {/* Text Side */}
                     <div className="w-full md:w-7/12 lg:w-2/3 flex flex-col justify-center">
-                      <h3 className="text-3xl font-bold mb-2">{member.name}</h3>
-                      <div className="text-accent font-semibold tracking-wide uppercase mb-6 flex items-center gap-2">
+                      <h3 className="text-3xl font-bold mb-2 tracking-tight">{member.name}</h3>
+                      <div className="text-primary font-semibold tracking-wide uppercase mb-6 flex items-center gap-2 text-sm">
                         <Code className="w-4 h-4" />
                         {member.role}
                       </div>
@@ -188,17 +188,17 @@ export function About() {
                       
                       <div className="flex flex-wrap gap-2 mb-8">
                         {member.expertise.map((skill, i) => (
-                          <span key={i} className="px-3 py-1 bg-surface border border-border rounded-md text-sm font-medium text-text/80">
+                          <span key={i} className="px-3 py-1 bg-surface border border-border rounded-md text-sm font-medium text-text/80 shadow-sm">
                             {skill}
                           </span>
                         ))}
                       </div>
 
                       <div className="flex items-center gap-4">
-                        <a href={member.github} className="p-3 bg-surface border border-border rounded-xl text-muted hover:text-accent hover:border-accent transition-all duration-300">
+                        <a href={member.github} className="p-3 bg-surface border border-border rounded-xl text-muted hover:text-primary hover:border-primary transition-all duration-300 shadow-sm">
                           <Github className="w-5 h-5" />
                         </a>
-                        <a href={member.linkedin} className="p-3 bg-surface border border-border rounded-xl text-muted hover:text-accent hover:border-accent transition-all duration-300">
+                        <a href={member.linkedin} className="p-3 bg-surface border border-border rounded-xl text-muted hover:text-primary hover:border-primary transition-all duration-300 shadow-sm">
                           <Linkedin className="w-5 h-5" />
                         </a>
                       </div>
@@ -215,19 +215,19 @@ export function About() {
       {/* Modern B2B CTA Section */}
       <section className="py-32 relative overflow-hidden bg-surface">
         {/* Abstract Background patterns */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-px bg-gradient-to-r from-transparent via-accent to-transparent opacity-50" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-accent/5 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent pointer-events-none" />
         
         <FadeIn direction="up">
           <div className="max-w-4xl mx-auto px-6 text-center relative z-10">
-            <h2 className="text-5xl font-display font-bold mb-6">Experience the Difference</h2>
+            <h2 className="text-5xl font-bold tracking-tight mb-6">Experience the Difference</h2>
             <p className="text-xl text-muted mb-12 leading-relaxed max-w-2xl mx-auto">
               Our advanced diarization and noise-cancellation models are ready to transform your audio. Fully free, open-source, and engineered for scale.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
               <Link
                 to="/app/upload"
-                className="flex items-center gap-3 bg-text text-bg hover:bg-white px-8 py-4 rounded-xl font-bold transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-1 text-lg"
+                className="flex items-center gap-3 bg-primary text-white hover:bg-primary-dark px-8 py-4 rounded-xl font-bold transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-1 text-lg"
               >
                 Access the Platform
                 <ArrowRight className="w-5 h-5" />
@@ -236,7 +236,7 @@ export function About() {
                 href="https://github.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 bg-surface text-text border border-border hover:border-accent hover:text-accent px-8 py-4 rounded-xl font-bold transition-all duration-300 text-lg"
+                className="flex items-center gap-3 bg-surface text-text border border-border hover:border-primary hover:text-primary px-8 py-4 rounded-xl font-bold transition-all duration-300 text-lg shadow-sm"
               >
                 <Github className="w-5 h-5" />
                 View Source

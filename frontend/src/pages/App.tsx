@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { UploadCloud, Settings, FileAudio, Play, Download, CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { UploadCloud, Settings, FileAudio, Play, Download, CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 type ProcessState = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
@@ -27,7 +28,7 @@ type ProcessResult = {
 
 type TranscriptFormat = 'txt' | 'srt' | 'vtt' | 'json';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').trim();
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim();
 
 function buildUrl(path: string): string {
   if (!path) return path;
@@ -62,6 +63,14 @@ export function App() {
   const [enableDiarization, setEnableDiarization] = useState(true);
   const [transcriptFormat, setTranscriptFormat] = useState<TranscriptFormat>('txt');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -125,26 +134,48 @@ export function App() {
       setProgress(100);
       setResult(data);
       setState('done');
+      setToast({ message: 'Processing completed successfully!', type: 'success' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Processing failed';
       setErrorMessage(message);
       setState('error');
+      setToast({ message, type: 'error' });
     } finally {
       window.clearInterval(progressTimer);
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12">
+    <div className="max-w-5xl mx-auto px-6 py-12 relative">
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border ${
+              toast.type === 'error' ? 'bg-error-light border-error/30 text-error' : 'bg-success-light border-success/30 text-success'
+            }`}
+          >
+            {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+            <span className="text-sm font-medium">{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70 transition-opacity">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="font-display text-3xl mb-2">Upload Lecture</h1>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">Upload Lecture</h1>
           <p className="text-sm text-muted">Upload a recording to get a transcript, AI explanations, and a practice quiz.</p>
         </div>
         
         <button 
           onClick={() => setSettingsOpen(!settingsOpen)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface border border-border text-sm font-medium hover:bg-surface2 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface border border-border text-sm font-medium hover:bg-surface2 transition-colors shadow-sm"
         >
           <Settings className="w-4 h-4" />
           Advanced Options
@@ -153,53 +184,67 @@ export function App() {
       </div>
 
       {/* Settings Panel */}
-      {settingsOpen && (
-        <div className="mb-8 p-6 bg-surface border border-border rounded-xl shadow-lg animate-in slide-in-from-top-4 fade-in duration-200">
-          <h3 className="font-bold mb-4 flex items-center gap-2">
-            <Settings className="w-4 h-4 text-accent2" />
-            Processing Settings
-          </h3>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">Identify Speakers</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="diarization"
-                  className="w-4 h-4 accent-accent rounded"
-                  checked={enableDiarization}
-                  onChange={(e) => setEnableDiarization(e.target.checked)}
-                />
-                <label htmlFor="diarization" className="text-sm">Enable speaker diarization</label>
+      <AnimatePresence>
+        {settingsOpen && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden mb-8"
+          >
+            <div className="p-6 bg-surface border border-border rounded-xl shadow-md">
+              <h3 className="font-bold mb-4 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-primary" />
+                Processing Settings
+              </h3>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Identify Speakers</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="diarization"
+                      className="w-4 h-4 accent-primary rounded"
+                      checked={enableDiarization}
+                      onChange={(e) => setEnableDiarization(e.target.checked)}
+                    />
+                    <label htmlFor="diarization" className="text-sm">Enable speaker diarization</label>
+                  </div>
+                  <p className="text-xs text-muted mt-2">Detects who spoke when and returns per-speaker segments/audio.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Transcript Format</label>
+                  <select
+                    className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none"
+                    value={transcriptFormat}
+                    onChange={(e) => setTranscriptFormat(e.target.value as TranscriptFormat)}
+                  >
+                    <option value="txt">TXT</option>
+                    <option value="srt">SRT</option>
+                    <option value="vtt">VTT</option>
+                    <option value="json">JSON</option>
+                  </select>
+                  <p className="text-xs text-muted mt-2">Format used for downloadable transcript output.</p>
+                </div>
               </div>
-              <p className="text-xs text-muted mt-2">Detects who spoke when and returns per-speaker segments/audio.</p>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Transcript Format</label>
-              <select
-                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
-                value={transcriptFormat}
-                onChange={(e) => setTranscriptFormat(e.target.value as TranscriptFormat)}
-              >
-                <option value="txt">TXT</option>
-                <option value="srt">SRT</option>
-                <option value="vtt">VTT</option>
-                <option value="json">JSON</option>
-              </select>
-              <p className="text-xs text-muted mt-2">Format used for downloadable transcript output.</p>
-            </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Area */}
-      <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-2xl">
+      <motion.div 
+        layout
+        className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm"
+      >
         
         {state === 'idle' && (
-          <div 
-            className={`p-12 text-center border-2 border-dashed m-6 rounded-xl transition-colors ${file ? 'border-accent bg-accent/5' : 'border-border hover:border-border2 bg-bg'}`}
-            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-accent', 'bg-accent/5'); }}
-            onDragLeave={(e) => { e.currentTarget.classList.remove('border-accent', 'bg-accent/5'); }}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className={`p-12 text-center border-2 border-dashed m-6 rounded-xl transition-colors ${file ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 bg-bg'}`}
+            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-primary', 'bg-primary/5'); }}
+            onDragLeave={(e) => { e.currentTarget.classList.remove('border-primary', 'bg-primary/5'); }}
             onDrop={handleDrop}
           >
             <input 
@@ -219,7 +264,7 @@ export function App() {
                 <p className="text-sm text-muted mb-6">or click to browse from your computer</p>
                 <button 
                   onClick={() => fileInputRef.current?.click()}
-                  className="bg-surface2 hover:bg-surface border border-border text-text px-6 py-2 rounded-lg text-sm font-medium transition-colors"
+                  className="bg-surface2 hover:bg-surface border border-border text-text px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
                 >
                   Select File
                 </button>
@@ -230,9 +275,9 @@ export function App() {
                 </div>
               </>
             ) : (
-              <>
-                <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto mb-6 border border-accent/30">
-                  <FileAudio className="w-8 h-8 text-accent2" />
+              <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }}>
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6 border border-primary/20">
+                  <FileAudio className="w-8 h-8 text-primary" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">{file.name}</h3>
                 <p className="text-sm text-muted mb-8">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
@@ -240,30 +285,34 @@ export function App() {
                 <div className="flex items-center justify-center gap-4">
                   <button 
                     onClick={() => setFile(null)}
-                    className="bg-surface2 hover:bg-surface border border-border text-text px-6 py-3 rounded-xl text-sm font-medium transition-colors"
+                    className="bg-surface2 hover:bg-surface border border-border text-text px-6 py-3 rounded-xl text-sm font-medium transition-colors shadow-sm"
                   >
                     Cancel
                   </button>
                   <button 
                     onClick={startProcessing}
-                    className="bg-accent hover:bg-accent/90 text-white px-8 py-3 rounded-xl text-sm font-bold transition-colors shadow-[0_0_20px_rgba(124,107,255,0.3)] flex items-center gap-2"
+                    className="bg-accent hover:bg-accent2 text-white px-8 py-3 rounded-xl text-sm font-bold transition-colors shadow-md flex items-center gap-2"
                   >
                     <Play className="w-4 h-4" /> Process File
                   </button>
                 </div>
-              </>
+              </motion.div>
             )}
-          </div>
+          </motion.div>
         )}
 
         {(state === 'uploading' || state === 'processing') && (
-          <div className="p-12 text-center">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-12 text-center"
+          >
             <div className="w-24 h-24 rounded-full bg-surface2 flex items-center justify-center mx-auto mb-8 relative">
               <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="4" className="text-border" />
-                <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="4" className="text-accent transition-all duration-300" strokeDasharray={`${progress * 3.01} 301`} />
+                <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="4" className="text-primary transition-all duration-300" strokeDasharray={`${progress * 3.01} 301`} />
               </svg>
-              <Loader2 className="w-8 h-8 text-accent2 animate-spin" />
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
             </div>
             
             <h3 className="text-xl font-bold mb-2">
@@ -277,15 +326,19 @@ export function App() {
             </p>
             
             <div className="max-w-md mx-auto bg-bg rounded-full h-2 overflow-hidden border border-border">
-              <div className="h-full bg-accent transition-all duration-300" style={{ width: `${progress}%` }} />
+              <div className="h-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }} />
             </div>
             <div className="mt-4 text-xs font-mono text-muted">{Math.round(progress)}% Complete</div>
-          </div>
+          </motion.div>
         )}
 
         {state === 'done' && (
-          <div className="p-0">
-            <div className="bg-teal/10 border-b border-teal/20 p-4 flex items-center justify-center gap-2 text-teal text-sm font-medium">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-0"
+          >
+            <div className="bg-success-light/50 border-b border-success/20 p-4 flex items-center justify-center gap-2 text-success text-sm font-medium">
               <CheckCircle2 className="w-5 h-5" /> Processing complete! Results are ready.
             </div>
             
@@ -313,11 +366,11 @@ export function App() {
                   </div>
                   
                   {/* After */}
-                  <div className="bg-accent/5 rounded-xl p-4 border border-accent/20">
+                  <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-mono text-accent2 uppercase tracking-widest">Cleaned</span>
+                      <span className="text-xs font-mono text-primary uppercase tracking-widest">Cleaned</span>
                       {result?.audio_url && (
-                        <a href={buildUrl(result.audio_url)} className="text-xs text-accent2 hover:text-white flex items-center gap-1" download>
+                        <a href={buildUrl(result.audio_url)} className="text-xs text-primary hover:text-primary-dark flex items-center gap-1" download>
                           <Download className="w-3 h-3" /> WAV
                         </a>
                       )}
@@ -338,14 +391,14 @@ export function App() {
                         <div key={speaker} className="p-3 bg-surface2 rounded-lg border border-border">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-3">
-                              <div className={`w-3 h-3 rounded-full ${idx % 2 === 0 ? 'bg-teal' : 'bg-amber'}`} />
+                              <div className={`w-3 h-3 rounded-full ${idx % 2 === 0 ? 'bg-success' : 'bg-warning'}`} />
                               <span className="text-sm font-medium">{speaker}</span>
                             </div>
-                            <a href={buildUrl(url)} className="text-muted hover:text-text" download>
+                            <a href={buildUrl(url as string)} className="text-muted hover:text-text" download>
                               <Download className="w-4 h-4" />
                             </a>
                           </div>
-                          <audio controls className="w-full" src={buildUrl(url)} />
+                          <audio controls className="w-full" src={buildUrl(url as string)} />
                         </div>
                       ))}
                     </div>
@@ -361,19 +414,19 @@ export function App() {
                   <h3 className="font-bold">Transcript</h3>
                   <div className="flex gap-2">
                     {result?.transcript_url && (
-                      <a href={buildUrl(result.transcript_url)} download className="px-2 py-1 text-[10px] font-mono rounded bg-surface2 border border-border text-muted hover:text-text">
+                      <a href={buildUrl(result.transcript_url)} download className="px-2 py-1 text-[10px] font-mono rounded bg-surface2 border border-border text-muted hover:text-text shadow-sm">
                         DOWNLOAD
                       </a>
                     )}
                   </div>
                 </div>
                 
-                <div className="flex-1 bg-bg rounded-xl border border-border p-4 overflow-y-auto max-h-[400px] space-y-4">
+                <div className="flex-1 bg-bg rounded-xl border border-border p-4 overflow-y-auto max-h-[400px] space-y-4 shadow-inner">
                   {(result?.transcript_segments && result.transcript_segments.length > 0) ? (
                     result.transcript_segments.map((seg, idx) => (
                       <div key={`${seg.start}-${idx}`}>
                         <div className="flex items-center gap-2 mb-1">
-                          <span className={`w-2 h-2 rounded-full ${idx % 2 === 0 ? 'bg-teal' : 'bg-amber'}`} />
+                          <span className={`w-2 h-2 rounded-full ${idx % 2 === 0 ? 'bg-success' : 'bg-warning'}`} />
                           <span className="text-xs font-bold">{seg.speaker || 'Speaker'}</span>
                           <span className="text-[10px] font-mono text-muted">
                             {formatTime(seg.start)} - {formatTime(seg.end)}
@@ -403,21 +456,25 @@ export function App() {
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {state === 'error' && (
-          <div className="p-8">
-            <div className="bg-red-light border border-red/30 text-red p-4 rounded-xl flex items-start gap-3">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="p-8"
+          >
+            <div className="bg-error-light border border-error/30 text-error p-4 rounded-xl flex items-start gap-3">
               <AlertCircle className="w-5 h-5 mt-0.5" />
               <div>
                 <p className="font-semibold mb-1">Processing failed</p>
                 <p className="text-sm">{errorMessage || 'Unknown error'}</p>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
-      </div>
+      </motion.div>
       
       <div className="mt-6 text-center">
         <p className="text-xs text-muted flex items-center justify-center gap-1">

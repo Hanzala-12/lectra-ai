@@ -6,84 +6,97 @@ export function Home() {
     <div className="flex flex-col min-h-screen">
       {/* Hero Section */}
       <section className="relative pt-32 pb-24 overflow-hidden">
-        <div className="absolute top-[-200px] right-[-200px] w-[700px] h-[700px] bg-[radial-gradient(circle,rgba(26,92,143,0.15)_0%,transparent_70%)] pointer-events-none" />
-        <div className="absolute bottom-[-100px] left-[-100px] w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(14,138,110,0.08)_0%,transparent_70%)] pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
-          <div className="z-10 animate-in fade-in slide-in-from-bottom-8 duration-700 ease-out fill-mode-both">
-            <h1 className="font-display text-5xl md:text-7xl leading-[1.1] tracking-tight mb-6">
-              Your lecture.<br />
-              <em className="text-accent2 not-italic">Transcribed, explained, quizzed.</em>
-            </h1>
-            
-            <p className="text-lg text-muted mb-10 max-w-xl leading-relaxed">
-              Upload your lecture recording → get a clean transcript, AI explanations in English or Urdu, and a personalized quiz — in minutes.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row items-center gap-4 mb-8">
-              <Link
-                to="/app/upload"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-accent hover:bg-accent2 text-white px-8 py-4 rounded-xl font-bold transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1"
-              >
-                <UploadCloud className="w-5 h-5" />
-                Upload a Lecture
-              </Link>
-              <a
-                href="#how-it-works"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-surface2 hover:bg-surface border border-border hover:border-border2 text-text px-8 py-4 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-1"
-              >
-                See How It Works
-              </a>
-            </div>
-            
-            <div className="flex items-center gap-6 text-sm text-muted font-mono">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-teal" />
-                <span>No signup required</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-teal" />
-                <span>Urdu & Roman Urdu</span>
-              </div>
-            </div>
+        <div className="max-w-5xl mx-auto px-6 text-center relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface border border-border text-sm font-medium text-muted mb-8 shadow-sm">
+            <span className="flex h-2 w-2 rounded-full bg-primary"></span>
+            Lectra AI is now in public beta
           </div>
           
-          {/* Animated Mockup */}
-          <div className="relative z-10 bg-surface border border-border rounded-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red animate-pulse" />
-                <span className="text-xs font-mono uppercase tracking-widest text-muted">Processing Lecture</span>
-              </div>
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8 text-text">
+            Your lecture.<br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">Transcribed, explained, quizzed.</span>
+          </h1>
+          
+          <p className="text-xl text-muted mb-10 max-w-2xl mx-auto leading-relaxed">
+            Upload your lecture recording and get a clean transcript, AI explanations in English or Urdu, and a personalized quiz — in minutes.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+            <Link
+              to="/app/upload"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-accent hover:bg-accent2 text-white px-8 py-4 rounded-full font-medium transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+            >
+              <UploadCloud className="w-5 h-5" />
+              Upload a Lecture
+            </Link>
+            <a
+              href="#how-it-works"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-surface hover:bg-surface2 border border-border text-text px-8 py-4 rounded-full font-medium transition-all duration-300 shadow-sm hover:shadow-md"
+            >
+              See How It Works
+            </a>
+          </div>
+          
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted font-medium">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-success" />
+              <span>No signup required</span>
             </div>
-            
-            <div className="space-y-4">
-              <div className="bg-bg rounded-xl p-4 border border-border">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-surface2 flex items-center justify-center text-text">
-                    <FileAudio className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="h-2 bg-border rounded-full w-3/4 mb-2" />
-                    <div className="h-2 bg-border rounded-full w-1/2" />
-                  </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-success" />
+              <span>Urdu & Roman Urdu Support</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-success" />
+              <span>Free during beta</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Animated Mockup Section */}
+      <section className="py-12 px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="relative z-10 bg-surface border border-border rounded-2xl p-2 shadow-2xl">
+            <div className="bg-surface2 rounded-xl overflow-hidden border border-border/50">
+              {/* Mockup Header */}
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-surface">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-error" />
+                  <div className="w-3 h-3 rounded-full bg-warning" />
+                  <div className="w-3 h-3 rounded-full bg-success" />
+                </div>
+                <div className="mx-auto bg-surface2 px-4 py-1 rounded-md text-xs font-mono text-muted flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  Processing Lecture
                 </div>
               </div>
               
-              <div className="bg-accent-light/50 rounded-xl p-4 border border-accent/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-bold text-accent">Teacher</span>
-                  <span className="text-[10px] font-mono text-muted">14:32</span>
+              {/* Mockup Content */}
+              <div className="p-6 md:p-10 grid md:grid-cols-2 gap-8 bg-bg">
+                <div className="space-y-6">
+                  <div className="bg-surface rounded-xl p-4 border border-border shadow-sm relative overflow-hidden">
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-semibold text-text">Teacher</span>
+                      <span className="text-[10px] font-mono text-muted">14:32</span>
+                    </div>
+                    <p className="text-sm text-muted leading-relaxed">So, the key concept in gradient descent is the learning rate. If it's too high, you overshoot. Too low, and it takes forever to converge.</p>
+                  </div>
                 </div>
-                <p className="text-sm text-text/80">So, the key concept in gradient descent is the learning rate...</p>
-              </div>
-              
-              <div className="bg-teal-light/50 rounded-xl p-4 border border-teal/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <Brain className="w-4 h-4 text-teal" />
-                  <span className="text-xs font-bold text-teal">AI Explanation (Urdu)</span>
+                
+                <div className="space-y-6">
+                  <div className="bg-success-light/50 rounded-xl p-4 border border-success/20 shadow-sm relative overflow-hidden">
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-success" />
+                    <div className="flex items-center gap-2 mb-2">
+                      <Brain className="w-4 h-4 text-success" />
+                      <span className="text-xs font-semibold text-success">AI Explanation (Urdu)</span>
+                    </div>
+                    <p className="text-sm text-text leading-relaxed">Gradient descent mein learning rate aapke qadam (steps) ka size hai. Agar step zyada bada hoga toh aap manzil miss kar denge, aur agar chota hoga toh bohot waqt lag jayega.</p>
+                  </div>
                 </div>
-                <p className="text-sm text-text/80">Gradient descent mein learning rate aapke qadam (steps) ka size hai...</p>
               </div>
             </div>
           </div>
@@ -111,27 +124,27 @@ export function Home() {
       <section className="py-24 bg-surface">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="font-display text-4xl md:text-5xl mb-4">Studying from recordings is <em className="text-red not-italic">broken.</em></h2>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">Studying from recordings is <span className="text-error">broken.</span></h2>
           </div>
           
           <div className="grid md:grid-cols-3 gap-12">
             <div className="text-center">
-              <div className="w-16 h-16 mx-auto bg-red-light rounded-2xl flex items-center justify-center mb-6">
-                <FileAudio className="w-8 h-8 text-red" />
+              <div className="w-16 h-16 mx-auto bg-error-light rounded-2xl flex items-center justify-center mb-6">
+                <FileAudio className="w-8 h-8 text-error" />
               </div>
               <h3 className="text-xl font-bold mb-3">Noisy recordings</h3>
               <p className="text-muted">AC hum, background chatter, and poor mics make it impossible to hear what the teacher actually said.</p>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 mx-auto bg-amber-light rounded-2xl flex items-center justify-center mb-6">
-                <BookOpen className="w-8 h-8 text-amber" />
+              <div className="w-16 h-16 mx-auto bg-warning-light rounded-2xl flex items-center justify-center mb-6">
+                <BookOpen className="w-8 h-8 text-warning" />
               </div>
               <h3 className="text-xl font-bold mb-3">Hours wasted re-watching</h3>
               <p className="text-muted">Spending 3 hours to take notes on a 1-hour lecture because you keep pausing and rewinding.</p>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 mx-auto bg-purple-light rounded-2xl flex items-center justify-center mb-6">
-                <Target className="w-8 h-8 text-purple" />
+              <div className="w-16 h-16 mx-auto bg-primary-light rounded-2xl flex items-center justify-center mb-6">
+                <Target className="w-8 h-8 text-primary" />
               </div>
               <h3 className="text-xl font-bold mb-3">Illusion of competence</h3>
               <p className="text-muted">You think you understood the lecture, but you have no way to test yourself until the midterm.</p>
@@ -141,24 +154,24 @@ export function Home() {
       </section>
 
       {/* Demo Section */}
-      <section id="demo" className="py-24 border-t border-border">
+      <section id="demo" className="py-24 border-t border-border bg-bg">
         <div className="max-w-5xl mx-auto px-6">
           <div className="text-center mb-12">
-            <h2 className="font-display text-4xl mb-4">Hear the difference. <em className="text-accent2 not-italic">See the result.</em></h2>
+            <h2 className="text-4xl font-bold mb-4 tracking-tight">Hear the difference. <span className="text-primary">See the result.</span></h2>
           </div>
           
           <div className="bg-surface border border-border rounded-2xl p-8 shadow-sm">
             <div className="grid md:grid-cols-2 gap-8 mb-8">
               {/* Before */}
-              <div className="bg-bg rounded-xl p-4 border border-border">
+              <div className="bg-surface2 rounded-xl p-4 border border-border">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-mono text-muted uppercase tracking-widest">Original Recording</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <button className="w-10 h-10 rounded-full bg-surface2 flex items-center justify-center text-text hover:bg-surface transition-colors shrink-0">
+                  <button className="w-10 h-10 rounded-full bg-surface flex items-center justify-center text-text hover:bg-border transition-colors shrink-0 shadow-sm">
                     <Play className="w-4 h-4 ml-0.5" />
                   </button>
-                  <div className="flex-1 h-8 bg-surface2 rounded relative overflow-hidden">
+                  <div className="flex-1 h-8 bg-surface rounded relative overflow-hidden shadow-inner">
                     <div className="absolute inset-0 flex items-center px-2 gap-[2px]">
                       {Array.from({length: 30}).map((_, i) => (
                         <div key={i} className="w-1 bg-muted/40 rounded-full" style={{ height: `${Math.max(20, Math.random() * 100)}%` }} />
@@ -169,18 +182,18 @@ export function Home() {
               </div>
               
               {/* After */}
-              <div className="bg-teal-light/30 rounded-xl p-4 border border-teal/20">
+              <div className="bg-success-light/30 rounded-xl p-4 border border-success/20">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-mono text-teal uppercase tracking-widest">After LECTRA-AI</span>
+                  <span className="text-xs font-mono text-success uppercase tracking-widest">After Lectra AI</span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <button className="w-10 h-10 rounded-full bg-teal flex items-center justify-center text-white hover:bg-teal/90 transition-colors shrink-0">
+                  <button className="w-10 h-10 rounded-full bg-success flex items-center justify-center text-white hover:bg-success/90 transition-colors shrink-0 shadow-sm">
                     <Play className="w-4 h-4 ml-0.5" />
                   </button>
-                  <div className="flex-1 h-8 bg-teal/10 rounded relative overflow-hidden">
+                  <div className="flex-1 h-8 bg-success/10 rounded relative overflow-hidden shadow-inner">
                     <div className="absolute inset-0 flex items-center px-2 gap-[2px]">
                       {Array.from({length: 30}).map((_, i) => (
-                        <div key={i} className="w-1 bg-teal/60 rounded-full" style={{ height: `${Math.max(10, Math.random() * 60)}%` }} />
+                        <div key={i} className="w-1 bg-success/60 rounded-full" style={{ height: `${Math.max(10, Math.random() * 60)}%` }} />
                       ))}
                     </div>
                   </div>
@@ -188,24 +201,24 @@ export function Home() {
               </div>
             </div>
             
-            <div className="bg-bg rounded-xl p-6 border border-border mb-8">
+            <div className="bg-surface2 rounded-xl p-6 border border-border mb-8">
               <div className="flex items-center gap-2 mb-4">
-                <span className="text-xs font-bold text-accent">Teacher</span>
+                <span className="text-xs font-bold text-text">Teacher</span>
                 <span className="text-[10px] font-mono text-muted">00:12</span>
               </div>
-              <p className="text-sm leading-relaxed mb-4">So, the key concept in gradient descent is the learning rate. If it's too high, you overshoot. Too low, and it takes forever to converge.</p>
+              <p className="text-sm leading-relaxed mb-4 text-muted">So, the key concept in gradient descent is the learning rate. If it's too high, you overshoot. Too low, and it takes forever to converge.</p>
               
-              <div className="bg-surface2 p-4 rounded-lg border border-border">
+              <div className="bg-surface p-4 rounded-lg border border-border shadow-sm">
                 <div className="flex items-center gap-2 mb-2">
-                  <Brain className="w-4 h-4 text-accent" />
-                  <span className="text-xs font-bold text-accent">AI Explanation</span>
+                  <Brain className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold text-primary">AI Explanation</span>
                 </div>
                 <p className="text-sm text-muted">Gradient descent is like walking down a mountain blindfolded. The learning rate is the size of your steps. Big steps = you might miss the bottom. Small steps = it takes too long.</p>
               </div>
             </div>
             
             <div className="text-center">
-              <Link to="/app/upload" className="inline-flex items-center gap-2 bg-accent hover:bg-accent2 text-white px-6 py-3 rounded-lg font-bold transition-colors">
+              <Link to="/app/upload" className="inline-flex items-center gap-2 bg-accent hover:bg-accent2 text-white px-6 py-3 rounded-full font-medium transition-colors shadow-sm hover:shadow-md">
                 Upload Your Own Lecture <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -217,7 +230,7 @@ export function Home() {
       <section id="how-it-works" className="py-24 bg-surface border-t border-border">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="font-display text-4xl md:text-5xl mb-4">How it <em className="text-accent2 not-italic">works</em></h2>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">How it <span className="text-primary">works</span></h2>
           </div>
           
           <div className="grid md:grid-cols-3 gap-12 relative">
@@ -228,24 +241,24 @@ export function Home() {
                 step: "01",
                 title: "Upload your lecture",
                 desc: "Drop any audio or video file (MP3, MP4, WAV). No signup required to start.",
-                icon: <UploadCloud className="w-6 h-6 text-accent" />
+                icon: <UploadCloud className="w-6 h-6 text-primary" />
               },
               {
                 step: "02",
-                title: "LECTRA-AI processes it",
+                title: "Lectra AI processes it",
                 desc: "We remove noise, transcribe speech, and generate AI explanations and quizzes.",
-                icon: <Brain className="w-6 h-6 text-accent" />
+                icon: <Brain className="w-6 h-6 text-primary" />
               },
               {
                 step: "03",
                 title: "Ace your exam",
                 desc: "Get a clean transcript, study notes, a practice quiz, and a personalized study plan.",
-                icon: <Target className="w-6 h-6 text-accent" />
+                icon: <Target className="w-6 h-6 text-primary" />
               }
             ].map((step, i) => (
               <div key={i} className="relative z-10 flex flex-col items-center text-center">
                 <div className="w-24 h-24 rounded-full bg-surface border border-border flex items-center justify-center mb-6 shadow-sm relative">
-                  <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-accent-light border border-accent/20 flex items-center justify-center text-xs font-mono text-accent">
+                  <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-primary-light border border-primary/20 flex items-center justify-center text-xs font-mono text-primary">
                     {step.step}
                   </div>
                   {step.icon}
