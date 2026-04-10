@@ -29,7 +29,7 @@ export function Home() {
                 Upload a Lecture
               </Link>
               <a
-                href="#demo"
+                href="#how-it-works"
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-surface2 hover:bg-surface border border-border hover:border-border2 text-text px-8 py-4 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-1"
               >
                 See How It Works
@@ -214,7 +214,7 @@ export function Home() {
       </section>
 
       {/* How It Works */}
-      <section className="py-24 bg-surface border-t border-border">
+      <section id="how-it-works" className="py-24 bg-surface border-t border-border">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="font-display text-4xl md:text-5xl mb-4">How it <em className="text-accent2 not-italic">works</em></h2>

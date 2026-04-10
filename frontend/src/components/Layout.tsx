@@ -37,7 +37,7 @@ export function Layout() {
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-8">
             <Link to="/features" className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300">Features</Link>
-            <Link to="/app/dashboard" className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300">How It Works</Link>
+            <a href="/#how-it-works" className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300">How It Works</a>
             <Link to="/about" className="text-sm font-medium text-muted hover:text-accent transition-colors duration-300">About Us</Link>
           </nav>
 
@@ -69,7 +69,7 @@ export function Layout() {
         {mobileMenuOpen && (
           <div className="md:hidden absolute top-full left-0 right-0 bg-surface border-b border-border p-6 flex flex-col gap-4 shadow-xl transition-all duration-300">
             <Link to="/features" className="text-lg font-medium hover:text-accent transition-colors" onClick={() => setMobileMenuOpen(false)}>Features</Link>
-            <Link to="/app/dashboard" className="text-lg font-medium hover:text-accent transition-colors" onClick={() => setMobileMenuOpen(false)}>How It Works</Link>
+            <a href="/#how-it-works" className="text-lg font-medium hover:text-accent transition-colors" onClick={() => setMobileMenuOpen(false)}>How It Works</a>
             <Link to="/about" className="text-lg font-medium hover:text-accent transition-colors" onClick={() => setMobileMenuOpen(false)}>About Us</Link>
             <div className="h-px bg-border my-2" />
             <Link
