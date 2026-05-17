@@ -11,6 +11,12 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
 
+# Setup logging early so optional import fallbacks can use logger safely
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 from media_loader import MediaLoader
 from vad_processor import VADProcessor
 from deepfilter_processor import DeepFilterProcessor
@@ -18,11 +24,17 @@ from diarization import SpeakerDiarization
 from asr_processor import ASRProcessor
 from cache_manager import FileCache
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Optional custom DSP modules
+try:
+    from audio_quality_profiler import AudioQualityProfiler
+    from audio_quality_metrics import AudioQualityMetrics
+    from spectral_restoration import SpectralRestoration
+    from adaptive_router import AdaptiveRouter
+
+    CUSTOM_DSP_AVAILABLE = True
+except ImportError as e:
+    CUSTOM_DSP_AVAILABLE = False
+    logger.warning(f"Custom DSP modules not available: {e}")
 
 
 class VoiceCleaningPipeline:
@@ -123,9 +135,54 @@ class VoiceCleaningPipeline:
         # If running via CLI (clean_voice.py), it will be lazy-initialised on first call to process().
         self.asr = None
 
+        # Initialize custom DSP modules (if enabled and available)
+        self._initialize_custom_modules()
+
         logger.info(
             "All components initialized successfully (ASR will load on first use)"
         )
+
+    def _initialize_custom_modules(self):
+        """Initialize optional custom DSP modules"""
+        if not CUSTOM_DSP_AVAILABLE:
+            self.profiler = None
+            self.quality_metrics = None
+            self.spectral_restoration = None
+            self.adaptive_router = None
+            return
+
+        # Audio Quality Profiler
+        if self.config.get("profiler", {}).get("enabled", False):
+            wavelet = self.config["profiler"].get("wavelet", "db8")
+            self.profiler = AudioQualityProfiler(
+                sample_rate=self.sample_rate, wavelet=wavelet
+            )
+            logger.info("Audio Quality Profiler enabled")
+        else:
+            self.profiler = None
+
+        # Quality Metrics
+        if self.config.get("quality_metrics", {}).get("enabled", False):
+            self.quality_metrics = AudioQualityMetrics(sample_rate=self.sample_rate)
+            logger.info("Audio Quality Metrics enabled")
+        else:
+            self.quality_metrics = None
+
+        # Spectral Restoration
+        if self.config.get("spectral_restoration", {}).get("enabled", False):
+            self.spectral_restoration = SpectralRestoration(
+                sample_rate=self.sample_rate
+            )
+            logger.info("Spectral Restoration enabled")
+        else:
+            self.spectral_restoration = None
+
+        # Adaptive Router
+        if self.config.get("adaptive_router", {}).get("enabled", False):
+            self.adaptive_router = AdaptiveRouter(sample_rate=self.sample_rate)
+            logger.info("Adaptive Router enabled")
+        else:
+            self.adaptive_router = None
 
     def _merge_segments(
         self, segments: List[Tuple[int, int]], max_length: int
@@ -224,6 +281,16 @@ class VoiceCleaningPipeline:
             f"Loaded {len(audio)/sr:.2f}s from {'video' if is_video else 'audio'}"
         )
 
+        # STEP 1.5: Audio Quality Profiling (optional)
+        audio_profile = None
+        if self.profiler is not None:
+            logger.info("\nSTEP 1.5: Audio Quality Profiling")
+            try:
+                audio_profile = self.profiler.profile_audio(audio, sr)
+                logger.info(self.profiler.format_profile(audio_profile))
+            except Exception as e:
+                logger.warning(f"Profiling failed: {e}, continuing without profile")
+
         # STEP 2: Diarize — find who speaks when
         logger.info("\nSTEP 2: Diarizing — finding speaker segments")
         import soundfile as sf
@@ -265,79 +332,124 @@ class VoiceCleaningPipeline:
         for start, end in speech_segments:
             clean_base[start:end] = audio[start:end]
 
-        # STEP 4: Per-segment DeepFilterNet noise removal (optimised)
-        # Key speedups:
-        #   • Merge nearby segments (≤200 ms gap) → fewer model calls
-        #   • Pre-resample clean_base to 48 kHz once → eliminates N input resamples
-        #   • Collect all output in 48 kHz domain, resample back once at the end
-        logger.info("\nSTEP 4: Per-segment DeepFilterNet noise removal (optimised)")
+        # STEP 3.5: Adaptive Router (optional) - try lighter methods first
+        use_deepfilter = True
+        router_method = None
+        if self.adaptive_router is not None and audio_profile is not None:
+            logger.info("\nSTEP 3.5: Adaptive Router - selecting processing method")
+            try:
+                routed_audio, router_method = self.adaptive_router.route_processing(
+                    clean_base, audio_profile, self.config
+                )
 
-        import librosa as _lib
-
-        df_sr = self.deepfilter.sample_rate  # 48000
-
-        # ── Merge nearby segments to reduce total model calls ─────────────────
-        MERGE_GAP_MS = 200
-        gap_samples = int(MERGE_GAP_MS / 1000 * sr)
-        if len(speech_segments) > 1:
-            proc_segs = [speech_segments[0]]
-            for seg_s, seg_e in speech_segments[1:]:
-                prev_s, prev_e = proc_segs[-1]
-                if seg_s - prev_e <= gap_samples:
-                    proc_segs[-1] = (prev_s, max(prev_e, seg_e))
+                if router_method != "deepfilternet_required":
+                    # Router handled the processing
+                    logger.info(
+                        f"Router used: {self.adaptive_router.get_method_description(router_method)}"
+                    )
+                    enhanced_audio = routed_audio
+                    use_deepfilter = False
                 else:
-                    proc_segs.append((seg_s, seg_e))
-        else:
-            proc_segs = list(speech_segments)
-        n_segs = len(proc_segs)
-        logger.info(
-            f"  {len(speech_segments)} diarization segments → "
-            f"{n_segs} processing segments (merged ≤{MERGE_GAP_MS}ms gaps)"
-        )
+                    logger.info("Router recommends DeepFilterNet for heavy noise")
+            except Exception as e:
+                logger.warning(
+                    f"Adaptive router failed: {e}, falling back to DeepFilterNet"
+                )
+                if self.config.get("adaptive_router", {}).get(
+                    "fallback_to_deepfilter", True
+                ):
+                    use_deepfilter = True
 
-        # ── Pre-resample clean_base once to DeepFilterNet's native SR ─────────
-        df_factor = df_sr / sr  # 3.0  (16 kHz → 48 kHz)
-        clean_df_in = (
-            _lib.resample(clean_base, orig_sr=sr, target_sr=df_sr)
-            if sr != df_sr
-            else clean_base.copy()
-        )
+        # STEP 4: Per-segment DeepFilterNet noise removal (optimised)
+        if use_deepfilter:
+            # Key speedups:
+            #   • Merge nearby segments (≤200 ms gap) → fewer model calls
+            #   • Pre-resample clean_base to 48 kHz once → eliminates N input resamples
+            #   • Collect all output in 48 kHz domain, resample back once at the end
+            logger.info("\nSTEP 4: Per-segment DeepFilterNet noise removal (optimised)")
 
-        n_df = int(np.ceil(len(clean_base) * df_factor))
-        enhanced_df = np.zeros(n_df, dtype=np.float32)
+            import librosa as _lib
 
-        # ── Processing loop ───────────────────────────────────────────────────
-        for i, (start, end) in enumerate(proc_segs):
-            s_df_in = int(start * df_factor)
-            e_df_in = min(int(end * df_factor), len(clean_df_in))
-            seg_for_df = clean_df_in[s_df_in:e_df_in]
+            df_sr = self.deepfilter.sample_rate  # 48000
 
-            enh_seg = self.deepfilter.process_audio_native(seg_for_df)
-
-            # Write result into the 48 kHz output array
-            s_df = int(start * df_factor)
-            e_df = min(int(end * df_factor), n_df)
-            seg_len_df = e_df - s_df
-            enh_seg = enh_seg[:seg_len_df]
-            if len(enh_seg) < seg_len_df:
-                enh_seg = np.pad(enh_seg, (0, seg_len_df - len(enh_seg)))
-            enhanced_df[s_df:e_df] = enh_seg
-
-            if (i + 1) % 10 == 0 or (i + 1) == n_segs:
-                logger.info(f"  Segment {i+1}/{n_segs} done")
-
-        # ── Single post-loop resample back to pipeline SR ─────────────────────
-        if df_sr != sr:
-            enhanced_audio = _lib.resample(enhanced_df, orig_sr=df_sr, target_sr=sr)
-        else:
-            enhanced_audio = enhanced_df
-
-        # Clip/pad to exact original length (resampling may drift ±1 sample)
-        enhanced_audio = enhanced_audio[: len(clean_base)].astype(np.float32)
-        if len(enhanced_audio) < len(clean_base):
-            enhanced_audio = np.pad(
-                enhanced_audio, (0, len(clean_base) - len(enhanced_audio))
+            # ── Merge nearby segments to reduce total model calls ─────────────────
+            MERGE_GAP_MS = 200
+            gap_samples = int(MERGE_GAP_MS / 1000 * sr)
+            if len(speech_segments) > 1:
+                proc_segs = [speech_segments[0]]
+                for seg_s, seg_e in speech_segments[1:]:
+                    prev_s, prev_e = proc_segs[-1]
+                    if seg_s - prev_e <= gap_samples:
+                        proc_segs[-1] = (prev_s, max(prev_e, seg_e))
+                    else:
+                        proc_segs.append((seg_s, seg_e))
+            else:
+                proc_segs = list(speech_segments)
+            n_segs = len(proc_segs)
+            logger.info(
+                f"  {len(speech_segments)} diarization segments → "
+                f"{n_segs} processing segments (merged ≤{MERGE_GAP_MS}ms gaps)"
             )
+
+            # ── Pre-resample clean_base once to DeepFilterNet's native SR ─────────
+            df_factor = df_sr / sr  # 3.0  (16 kHz → 48 kHz)
+            clean_df_in = (
+                _lib.resample(clean_base, orig_sr=sr, target_sr=df_sr)
+                if sr != df_sr
+                else clean_base.copy()
+            )
+
+            n_df = int(np.ceil(len(clean_base) * df_factor))
+            enhanced_df = np.zeros(n_df, dtype=np.float32)
+
+            # ── Processing loop ───────────────────────────────────────────────────
+            for i, (start, end) in enumerate(proc_segs):
+                s_df_in = int(start * df_factor)
+                e_df_in = min(int(end * df_factor), len(clean_df_in))
+                seg_for_df = clean_df_in[s_df_in:e_df_in]
+
+                enh_seg = self.deepfilter.process_audio_native(seg_for_df)
+
+                # Write result into the 48 kHz output array
+                s_df = int(start * df_factor)
+                e_df = min(int(end * df_factor), n_df)
+                seg_len_df = e_df - s_df
+                enh_seg = enh_seg[:seg_len_df]
+                if len(enh_seg) < seg_len_df:
+                    enh_seg = np.pad(enh_seg, (0, seg_len_df - len(enh_seg)))
+                enhanced_df[s_df:e_df] = enh_seg
+
+                if (i + 1) % 10 == 0 or (i + 1) == n_segs:
+                    logger.info(f"  Segment {i+1}/{n_segs} done")
+
+            # ── Single post-loop resample back to pipeline SR ─────────────────────
+            if df_sr != sr:
+                enhanced_audio = _lib.resample(enhanced_df, orig_sr=df_sr, target_sr=sr)
+            else:
+                enhanced_audio = enhanced_df
+
+            # Clip/pad to exact original length (resampling may drift ±1 sample)
+            enhanced_audio = enhanced_audio[: len(clean_base)].astype(np.float32)
+            if len(enhanced_audio) < len(clean_base):
+                enhanced_audio = np.pad(
+                    enhanced_audio, (0, len(clean_base) - len(enhanced_audio))
+                )
+
+        # STEP 4.5: Spectral Restoration (optional)
+        if self.spectral_restoration is not None:
+            logger.info("\nSTEP 4.5: Spectral Restoration")
+            try:
+                strength = self.config.get("spectral_restoration", {}).get(
+                    "strength", "auto"
+                )
+                enhanced_audio = self.spectral_restoration.adaptive_restoration(
+                    audio, enhanced_audio, strength=strength
+                )
+                logger.info("Spectral restoration applied")
+            except Exception as e:
+                logger.warning(
+                    f"Spectral restoration failed: {e}, using unrestored audio"
+                )
 
         # STEP 5: Re-apply zero outside speech so DeepFilterNet output bleed is gone
         # Apply 10ms cosine fades at segment edges to avoid clicks.
@@ -488,6 +600,20 @@ class VoiceCleaningPipeline:
 
         elapsed_time = time.time() - start_time
 
+        # STEP 10: Quality Metrics (optional)
+        quality_metrics_results = None
+        if self.quality_metrics is not None:
+            logger.info("\nSTEP 10: Computing Quality Metrics")
+            try:
+                quality_metrics_results = self.quality_metrics.comprehensive_evaluation(
+                    audio, final_audio, sr
+                )
+                logger.info(
+                    self.quality_metrics.format_results(quality_metrics_results)
+                )
+            except Exception as e:
+                logger.warning(f"Quality metrics computation failed: {e}")
+
         # Return results
         results = {
             "input_path": input_path,
@@ -502,6 +628,14 @@ class VoiceCleaningPipeline:
             "processing_time": elapsed_time,
             "from_cache": False,
         }
+
+        # Add optional custom DSP results
+        if audio_profile is not None:
+            results["audio_profile"] = audio_profile
+        if router_method is not None:
+            results["processing_method"] = router_method
+        if quality_metrics_results is not None:
+            results["quality_metrics"] = quality_metrics_results
 
         # Cache the results for next time
         if self.enable_cache and self.cache:

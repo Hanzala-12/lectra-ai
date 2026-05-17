@@ -4,7 +4,8 @@
  */
 
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import { Layout } from './components/Layout';
 import { AppLayout } from './components/AppLayout';
 import { Home } from './pages/Home';
@@ -21,24 +22,28 @@ import { Analytics } from './pages/Analytics';
 import { Chat } from './pages/Chat';
 import { NotFound } from './pages/NotFound';
 
-export default function App() {
+function AnimatedRoutes() {
+  const location = useLocation();
+  // Using location.pathname.split('/')[1] allows Layout routes to share a key
+  // and AppLayout routes to share a key, so we only animate the top-level shell 
+  // when switching between the main website and the app layout.
+  const layoutKey = location.pathname.startsWith('/app') ? 'app' : 'public';
+
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          
-          <Route path="app" element={<AppLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="upload" element={<DemoApp />} />
-            <Route path="library" element={<Library />} />
-            <Route path="quiz" element={<Quiz />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="chat" element={<Chat />} />
-          </Route>
-          
-          <Route path="features" element={<Features />} />
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={layoutKey}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.3 }}
+        className="w-full min-h-screen"
+      >
+        <Routes location={location}>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            
+            <Route path="features" element={<Features />} />
           <Route path="docs" element={<Docs />} />
           <Route path="about" element={<About />} />
           <Route path="login" element={<Login />} />
@@ -51,7 +56,26 @@ export default function App() {
           
           <Route path="*" element={<NotFound />} />
         </Route>
-      </Routes>
+
+        <Route path="/app" element={<AppLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="upload" element={<DemoApp />} />
+          <Route path="library" element={<Library />} />
+          <Route path="quiz" element={<Quiz />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="chat" element={<Chat />} />
+        </Route>
+        </Routes>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AnimatedRoutes />
     </BrowserRouter>
   );
 }

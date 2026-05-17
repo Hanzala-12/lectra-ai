@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-A production-ready noise removal pipeline for speech audio with custom digital signal processing (DSP) algorithms for academic research and deployment.
+A production-ready noise removal pipeline for speech audio with optional custom digital signal processing (DSP) modules for academic research and deployment.
 
 ## Overview
 
@@ -34,7 +34,7 @@ This project combines state-of-the-art deep learning models with custom algorith
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/voice-cleaning-pipeline.git
+git clone https://github.com/Hanzala-12/voice-cleaning-pipeline.git
 cd voice-cleaning-pipeline
 
 # Create virtual environment
@@ -121,10 +121,16 @@ docker-compose up --build
 
 ## Custom DSP Modules
 
-This project includes **2,950 lines** of custom digital signal processing algorithms demonstrating advanced audio engineering concepts:
+This project includes **five optional custom DSP modules** for research and experimentation:
+
+### [Experimental] Custom Modules (Disabled by Default)
+
+**Status**: ✅ Implemented | ⚠️ Experimental | 🔒 Disabled by Default
+
+The following modules are available but disabled by default to preserve the stable production pipeline:
 
 ### 1. Audio Quality Profiler (`src/audio_quality_profiler.py`)
-**~400 lines of code**
+**~400 lines of code** | **Status**: ✅ Implemented
 
 Analyzes input audio characteristics before processing:
 - Wavelet-based noise estimation
@@ -143,7 +149,7 @@ print(f"Recommended processing: {metrics['recommended_processing']}")
 ```
 
 ### 2. Spectral Restoration (`src/spectral_restoration.py`)
-**~450 lines of code**
+**~450 lines of code** | **Status**: ✅ Implemented
 
 Restores high-frequency content lost during aggressive noise removal:
 - Cepstral analysis for voice/noise separation
@@ -159,7 +165,7 @@ enhanced = restorer.adaptive_restoration(original, denoised)
 ```
 
 ### 3. Audio Quality Metrics (`src/audio_quality_metrics.py`)
-**~550 lines of code**
+**~550 lines of code** | **Status**: ✅ Implemented
 
 Nine scientific metrics for quality evaluation:
 1. SNR (Signal-to-Noise Ratio)
@@ -181,7 +187,7 @@ print(f"Quality Score: {results['overall_quality_score']:.1f}/100")
 ```
 
 ### 4. Adaptive Router (`src/adaptive_router.py`)
-**~450 lines of code**
+**~450 lines of code** | **Status**: ✅ Implemented
 
 Intelligent processing method selection based on noise level:
 - **Light noise** (SNR > 15 dB): Spectral Subtraction
@@ -197,7 +203,7 @@ print(f"Processing method: {decision}")
 ```
 
 ### 5. Performance Optimization (`src/optimized_utils.py`)
-**~550 lines of code**
+**~550 lines of code** | **Status**: ✅ Implemented
 
 CPU-level optimizations achieving 3-64x speedup:
 - Numba JIT compilation (LLVM machine code)
@@ -217,11 +223,36 @@ processor = VectorizedAudioProcessor(sample_rate=16000)
 energies = processor.compute_frame_energies_vectorized(audio)  # 64x faster!
 ```
 
+### Enabling Custom Modules
+
+**Important**: Custom modules are **disabled by default** to preserve the stable production pipeline.
+
+To enable them, edit `config.yaml`:
+
+```yaml
+profiler:
+  enabled: true  # Enable audio quality profiling
+  
+adaptive_router:
+  enabled: true  # Enable intelligent method selection
+  
+spectral_restoration:
+  enabled: true  # Enable post-processing enhancement
+  
+quality_metrics:
+  enabled: true  # Enable quality evaluation
+```
+
+**Note**: These modules are experimental and may affect processing time and quality. Use with caution in production.
+
+For detailed documentation, see [docs/CUSTOM_DSP.md](docs/CUSTOM_DSP.md).
+
 ---
 
 ## Documentation
 
 - **[Architecture](docs/ARCHITECTURE.md)**: System design and component overview
+- **[Custom DSP Modules](docs/CUSTOM_DSP.md)**: API reference and usage guide for experimental modules
 - **[Performance Optimization](docs/OPTIMIZATION.md)**: CPU optimization techniques and benchmarks
 - **[Integration Guide](docs/INTEGRATION.md)**: How to integrate custom modules into the pipeline
 
@@ -235,17 +266,17 @@ energies = processor.compute_frame_energies_vectorized(audio)  # 64x faster!
 python examples/performance_benchmark.py
 ```
 
-**Expected output**:
+**Expected output** (with Numba installed):
 ```
 RESULTS - Frame Energy Calculation
-  Original:     38.50 ms
-  Optimized:     0.60 ms
-  Speedup:      64.2x faster
+  Original (NumPy):  38.50 ms
+  Optimized (Numba):  0.60 ms
+  Speedup:           64.2x faster
 
 RESULTS - SNR Estimation
-  Original:     18.70 ms
-  Optimized:     0.80 ms
-  Speedup:      23.4x faster
+  Original (NumPy):  18.70 ms
+  Optimized (Numba):  0.80 ms
+  Speedup:           23.4x faster
 
 All accuracy tests: PASSED
 ```
@@ -253,22 +284,26 @@ All accuracy tests: PASSED
 ### Custom Integration Demo
 
 ```bash
-python examples/custom_integration.py input_audio.wav
+python examples/custom_integration.py [input_audio.wav]
 ```
 
-Shows complete workflow with all custom modules integrated.
+Shows complete workflow with all custom modules integrated. If no audio file provided, uses synthetic test audio.
 
 ### Interactive Jupyter Notebook
 
 ```bash
-jupyter notebook notebooks/performance_optimization.ipynb
+cd kaggle_demo
+jupyter notebook notebook.ipynb
 ```
 
 Contains:
 - Live performance benchmarks
-- Visual comparison charts
+- Visual comparison charts (waveforms, spectrograms)
 - Accuracy validation
-- Waveform analysis
+- Quality metrics evaluation
+- Step-by-step demonstrations of all 5 custom modules
+
+**Kaggle Ready**: The `kaggle_demo/` folder can be zipped and uploaded to Kaggle as a standalone dataset.
 
 ---
 
@@ -312,11 +347,14 @@ See [API Documentation](docs/ARCHITECTURE.md#deployment-architecture) for full d
 ### Run All Tests
 
 ```bash
-# Unit tests
+# Full suite (requires complete runtime deps, including soundfile)
 pytest tests/
 
 # Custom module tests
-pytest tests/test_custom_modules.py
+pytest tests/test_custom_modules.py -v
+
+# Cleanup tool tests
+pytest tests/test_cleanup_tool.py tests/test_cleanup_tool_properties.py -q
 
 # Integration tests
 pytest tests/test_pipeline.py
@@ -325,14 +363,11 @@ pytest tests/test_pipeline.py
 pytest tests/test_api.py
 ```
 
-### Expected Test Results
+### Verified Test Status (May 17, 2026)
 
 ```
-tests/test_custom_modules.py ........... [100%]
-tests/test_pipeline.py ................ [100%]
-tests/test_api.py ..................... [100%]
-
-============ 25 passed in 8.45s ============
+cleanup_tool tests: 78 passed
+pytest tests -q: blocked in current environment by missing dependency `soundfile`
 ```
 
 ---
@@ -365,7 +400,7 @@ tests/test_api.py ..................... [100%]
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | **Backend** | FastAPI | REST API server |
-| **Frontend** | React 18 | Web interface |
+| **Frontend** | React 19 + TypeScript | Web interface |
 | **Noise Removal** | DeepFilterNet3 | Deep learning noise reduction |
 | **Speech Recognition** | faster-whisper Turbo | Transcription |
 | **Speaker Diarization** | Pyannote 3.1 | Speaker identification |
@@ -478,8 +513,8 @@ If you use this project in your research, please cite:
 @software{voice_cleaning_pipeline,
   title = {Voice Cleaning Pipeline with Custom DSP Enhancements},
   year = {2026},
-  author = {Your Name},
-  url = {https://github.com/yourusername/voice-cleaning-pipeline}
+  author = {Hanzala-12 and contributors},
+  url = {https://github.com/Hanzala-12/voice-cleaning-pipeline}
 }
 ```
 
@@ -488,8 +523,7 @@ If you use this project in your research, please cite:
 ## Support
 
 - **Documentation**: See [docs/](docs/) folder
-- **Issues**: [GitHub Issues](https://github.com/yourusername/voice-cleaning-pipeline/issues)
-- **Email**: your.email@example.com
+- **Issues**: [GitHub Issues](https://github.com/Hanzala-12/voice-cleaning-pipeline/issues)
 
 ---
 
@@ -510,9 +544,9 @@ If you use this project in your research, please cite:
 
 ---
 
-**Status**: Production Ready + Research Extensions  
-**Last Updated**: March 2026  
-**Maintainer**: Your Name
+**Status**: Production Ready Core + Experimental DSP Extensions  
+**Last Updated**: May 2026  
+**Maintainer**: Hanzala-12
 
 ---
 
@@ -520,4 +554,4 @@ If you use this project in your research, please cite:
 
 If you find this project useful, please consider giving it a star on GitHub.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/voice-cleaning-pipeline&type=Date)](https://star-history.com/#yourusername/voice-cleaning-pipeline&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Hanzala-12/voice-cleaning-pipeline&type=Date)](https://star-history.com/#Hanzala-12/voice-cleaning-pipeline&Date)

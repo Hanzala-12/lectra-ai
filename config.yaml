@@ -23,7 +23,7 @@ diarization:
   max_speakers: 10
   
 asr:
-  skip: true   # PAUSED - set false to re-enable transcription
+  skip: false  # enabled
   model: "turbo"  # tiny, base, small, medium, large, large-v3, turbo (recommended)
   language: null  # auto-detect if null
   compute_type: "int8"  # int8 (fastest on CPU), float16, or float32
@@ -31,6 +31,28 @@ asr:
   
 cache:
   enabled: false  # DISABLED for testing new voice isolation architecture
+
+# ============================================================================
+# Custom DSP Modules (Experimental - disabled by default)
+# ============================================================================
+
+profiler:
+  enabled: false  # Enable audio quality profiling before processing
+  wavelet: 'db8'  # Wavelet type for noise estimation (db4, db8, sym4, etc.)
+
+adaptive_router:
+  enabled: false  # Enable intelligent processing method selection
+  fallback_to_deepfilter: true  # Always use DeepFilterNet if router fails
+
+spectral_restoration:
+  enabled: false  # Enable post-processing spectral restoration
+  strength: 'auto'  # Restoration strength: 'auto', 'light', 'medium', 'heavy'
+
+quality_metrics:
+  enabled: false  # Enable quality metrics computation
+  compute_composite_score: true  # Compute overall quality score (0-100)
+
+# ============================================================================
   
 output:
   format: "wav"  # wav, mp3, flac

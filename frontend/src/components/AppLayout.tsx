@@ -1,9 +1,10 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useOutlet } from 'react-router-dom';
 import { LayoutDashboard, UploadCloud, Library, HelpCircle, LineChart, MessageSquare, GraduationCap } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 export function AppLayout() {
   const location = useLocation();
+  const element = useOutlet();
   
   const navItems = [
     { path: '/app/dashboard', icon: <LayoutDashboard className="w-5 h-5" />, label: 'Dashboard' },
@@ -15,9 +16,10 @@ export function AppLayout() {
   ];
 
   return (
-    <div className="flex flex-col md:flex-row max-w-7xl mx-auto w-full px-6">
-      {/* Sidebar */}
-      <aside className="w-64 shrink-0 hidden md:block py-8 pr-8 border-r border-border min-h-[calc(100vh-6rem)]">
+    <div className="min-h-screen bg-bg text-text flex flex-col items-center">
+      <div className="flex flex-col md:flex-row max-w-7xl mx-auto w-full px-6 flex-1">
+        {/* Sidebar */}
+        <aside className="w-64 shrink-0 hidden md:block py-8 pr-8 border-r border-border min-h-[calc(100vh-6rem)]">
         <div className="mb-8 px-4">
           <Link to="/" className="flex items-center gap-2 group">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white transition-transform group-hover:scale-105 shadow-sm">
@@ -86,10 +88,11 @@ export function AppLayout() {
             transition={{ duration: 0.3, ease: 'easeOut' }}
             className="w-full h-full"
           >
-            <Outlet />
+            {element}
           </motion.div>
         </AnimatePresence>
       </main>
+      </div>
     </div>
   );
 }

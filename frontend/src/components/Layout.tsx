@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useOutlet } from 'react-router-dom';
 import { Menu, X, Github, GraduationCap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -7,6 +7,7 @@ export function Layout() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const element = useOutlet();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -103,7 +104,7 @@ export function Layout() {
             transition={{ duration: 0.3, ease: 'easeOut' }}
             className="w-full h-full"
           >
-            <Outlet />
+            {element}
           </motion.div>
         </AnimatePresence>
       </main>
