@@ -34,8 +34,8 @@ This project combines state-of-the-art deep learning models with custom algorith
 
 ```bash
 # Clone repository
-git clone https://github.com/Hanzala-12/voice-cleaning-pipeline.git
-cd voice-cleaning-pipeline
+git clone https://github.com/Hanzala-12/lectra-ai.git
+cd lectra-ai
 
 # Create virtual environment
 python -m venv venv
@@ -526,7 +526,7 @@ If you use this project in your research, please cite:
   title = {Lectra AI with Custom DSP Enhancements},
   year = {2026},
   author = {Hanzala-12 and contributors},
-  url = {https://github.com/Hanzala-12/voice-cleaning-pipeline}
+  url = {https://github.com/Hanzala-12/lectra-ai}
 }
 ```
 
@@ -535,7 +535,7 @@ If you use this project in your research, please cite:
 ## Support
 
 - **Documentation**: See [docs/](docs/) folder
-- **Issues**: [GitHub Issues](https://github.com/Hanzala-12/voice-cleaning-pipeline/issues)
+- **Issues**: [GitHub Issues](https://github.com/Hanzala-12/lectra-ai/issues)
 
 ---
 
@@ -566,4 +566,4 @@ If you use this project in your research, please cite:
 
 If you find this project useful, please consider giving it a star on GitHub.
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Hanzala-12/voice-cleaning-pipeline&type=Date)](https://star-history.com/#Hanzala-12/voice-cleaning-pipeline&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Hanzala-12/lectra-ai&type=Date)](https://star-history.com/#Hanzala-12/lectra-ai&Date)

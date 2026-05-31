@@ -64,14 +64,14 @@ jobs:
     
     - name: Build Docker image
       run: |
-        docker build -t voice-cleaning:${{ github.sha }} .
+        docker build -t lectra-ai:${{ github.sha }} .
     
     - name: Save Docker image
       run: |
-        docker save voice-cleaning:${{ github.sha }} | gzip > voice-cleaning.tar.gz
+        docker save lectra-ai:${{ github.sha }} | gzip > lectra-ai.tar.gz
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: docker-image
-        path: voice-cleaning.tar.gz
+        path: lectra-ai.tar.gz

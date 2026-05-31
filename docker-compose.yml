@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: voice-cleaning-backend
+    container_name: lectra-ai-backend
     ports:
       - "8000:8000"
     volumes:
@@ -25,7 +25,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: voice-cleaning-frontend
+    container_name: lectra-ai-frontend
     ports:
       - "3000:3000"
     environment:
@@ -36,7 +36,7 @@ services:
   
   redis:
     image: redis:7-alpine
-    container_name: voice-cleaning-redis
+    container_name: lectra-ai-redis
     ports:
       - "6379:6379"
     volumes:
@@ -45,7 +45,7 @@ services:
   
   prometheus:
     image: prom/prometheus:latest
-    container_name: voice-cleaning-prometheus
+    container_name: lectra-ai-prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -58,7 +58,7 @@ services:
   
   grafana:
     image: grafana/grafana:latest
-    container_name: voice-cleaning-grafana
+    container_name: lectra-ai-grafana
     ports:
       - "3001:3000"
     volumes:
@@ -77,4 +77,4 @@ volumes:
 
 networks:
   default:
-    name: voice-cleaning-network
+    name: lectra-ai-network

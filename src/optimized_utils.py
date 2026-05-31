@@ -160,7 +160,10 @@ class VectorizedAudioProcessor:
                 _ = _compute_frame_energies_numba(audio, frame_len, hop_len)
             numba_time = (time.time() - start) / n_iterations * 1000  # ms
 
-            speedup = numpy_time / numba_time
+            try:
+                speedup = numpy_time / numba_time
+            except ZeroDivisionError:
+                speedup = float("inf") if numpy_time > 0 else 1.0
         else:
             numba_time = numpy_time
             speedup = 1.0
@@ -191,7 +194,10 @@ class VectorizedAudioProcessor:
                 _ = _estimate_snr_numba(clean, noisy)
             numba_time = (time.time() - start) / n_iterations * 1000  # ms
 
-            speedup = numpy_time / numba_time
+            try:
+                speedup = numpy_time / numba_time
+            except ZeroDivisionError:
+                speedup = float("inf") if numpy_time > 0 else 1.0
         else:
             numba_time = numpy_time
             speedup = 1.0
@@ -222,7 +228,10 @@ class VectorizedAudioProcessor:
                 _ = _fast_rms_numba(audio, frame_len)
             numba_time = (time.time() - start) / n_iterations * 1000  # ms
 
-            speedup = numpy_time / numba_time
+            try:
+                speedup = numpy_time / numba_time
+            except ZeroDivisionError:
+                speedup = float("inf") if numpy_time > 0 else 1.0
         else:
             numba_time = numpy_time
             speedup = 1.0

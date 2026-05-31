@@ -5,7 +5,7 @@
 The project is actively implemented and substantially more complete than earlier draft assessments suggested.
 
 Current state:
-- Core voice-cleaning pipeline is implemented and wired end-to-end.
+- Core Lectra AI pipeline is implemented and wired end-to-end.
 - Custom DSP modules exist in source, have tests, and are integrated as optional features.
 - Cleanup tool implementation and tests are complete.
 - Documentation quality is good overall, but some README sections were outdated/placeholders and needed correction.

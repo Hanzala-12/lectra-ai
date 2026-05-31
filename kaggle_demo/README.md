@@ -30,7 +30,7 @@ This folder contains a standalone Kaggle-ready demonstration of the custom DSP m
 4. In the notebook, run:
    ```python
    import sys
-   sys.path.insert(0, '/kaggle/input/voice-cleaning-dsp-demo/kaggle_demo')
+   sys.path.insert(0, '/kaggle/input/lectra-ai-dsp-demo/kaggle_demo')
    ```
 
 5. Open and run `notebook.ipynb`

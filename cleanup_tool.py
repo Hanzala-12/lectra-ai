@@ -21,6 +21,7 @@ import logging
 import argparse
 import shutil
 import datetime
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -943,14 +944,25 @@ class ReportGenerator:
 class Validator:
     """Runs post-deletion validation commands and triggers restore on failure."""
 
-    VALIDATION_COMMANDS = [
-        "python -c \"import src.pipeline; print('Pipeline OK')\"",
-        "python clean_voice.py --help",
-        "pytest tests/ -v --ignore=tests/test_custom_modules.py",
-    ]
-
     def __init__(self, root: Path):
         self.root = root
+        self.python_executable = sys.executable
+
+    def _validation_commands(self) -> List[str]:
+        """Build validation commands bound to the current interpreter."""
+        src_path = (self.root / "src").as_posix()
+        return [
+            (
+                f'"{self.python_executable}" -c '
+                f"\"import sys; sys.path.insert(0, r'{src_path}'); "
+                f"import pipeline; print('Pipeline OK')\""
+            ),
+            f'"{self.python_executable}" clean_voice.py --help',
+            (
+                f'"{self.python_executable}" -m pytest tests/ -v '
+                f"--ignore=tests/test_custom_modules.py"
+            ),
+        ]
 
     def _run_command(self, cmd: str) -> CommandResult:
         """Run a shell command and return a CommandResult."""
@@ -989,7 +1001,7 @@ class Validator:
     def validate(self) -> ValidationResult:
         """Run all three validation commands and return a ValidationResult."""
         results: List[CommandResult] = []
-        for cmd in self.VALIDATION_COMMANDS:
+        for cmd in self._validation_commands():
             result = self._run_command(cmd)
             results.append(result)
             if result.exit_code != 0:
