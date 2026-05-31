@@ -1,6 +1,6 @@
 """Package initialization"""
 
-from .pipeline import VoiceCleaningPipeline
+from .pipeline import LectraAIPipeline
 from .media_loader import MediaLoader
 from .vad_processor import VADProcessor
 from .deepfilter_processor import DeepFilterProcessor
@@ -9,7 +9,7 @@ from .asr_processor import ASRProcessor
 
 __version__ = "1.0.0"
 __all__ = [
-    "VoiceCleaningPipeline",
+    "LectraAIPipeline",
     "MediaLoader",
     "VADProcessor",
     "DeepFilterProcessor",

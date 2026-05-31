@@ -109,7 +109,7 @@ If you encounter version conflicts:
    python -m venv verify_env
    source verify_env/bin/activate
    pip install -r requirements-prod.txt
-   python -c "from pipeline import VoiceCleaningPipeline; print('OK')"
+   python -c "from pipeline import LectraAIPipeline; print('OK')"
    ```
 
 ### Update Flexible Requirements (requirements.txt)

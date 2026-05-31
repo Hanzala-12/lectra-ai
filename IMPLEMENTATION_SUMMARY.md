@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document summarizes the implementation of the 5 custom DSP modules for the Voice Cleaning Pipeline project.
+This document summarizes the implementation of the 5 custom DSP modules for the Lectra AI project.
 
 **Date**: May 13, 2026  
 **Status**: ✅ Complete  

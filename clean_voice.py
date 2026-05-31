@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Voice Cleaning CLI
-Command-line interface for the voice cleaning pipeline
+Lectra AI CLI
+Command-line interface for the Lectra AI pipeline
 """
 
 import argparse
@@ -12,13 +12,13 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from pipeline import VoiceCleaningPipeline
+from pipeline import LectraAIPipeline
 from utils import get_audio_files
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Voice Cleaning Pipeline - Remove background noise from audio/video files",
+        description="Lectra AI - Remove background noise from audio/video files",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -126,8 +126,8 @@ Examples:
 
     # Initialize pipeline
     try:
-        print("Initializing voice cleaning pipeline...")
-        pipeline = VoiceCleaningPipeline(args.config)
+        print("Initializing Lectra AI pipeline...")
+        pipeline = LectraAIPipeline(args.config)
 
         # Apply command-line overrides
         if args.format:

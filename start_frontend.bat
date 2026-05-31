@@ -1,5 +1,5 @@
 @echo off
-echo Starting Voice Cleaning Frontend...
+echo Starting Lectra AI Frontend...
 cd /d %~dp0
 cd frontend
 call npm run dev

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides detailed API reference, formulas, and usage examples for the five custom DSP modules in the Voice Cleaning Pipeline.
+This document provides detailed API reference, formulas, and usage examples for the five custom DSP modules in Lectra AI.
 
 **Status**: Experimental (disabled by default)  
 **Total Lines of Code**: ~2,400 lines  
@@ -507,10 +507,10 @@ quality_metrics:
 ### Programmatic Usage
 
 ```python
-from src.pipeline import VoiceCleaningPipeline
+from src.pipeline import LectraAIPipeline
 
 # Initialize with custom modules enabled
-pipeline = VoiceCleaningPipeline('config.yaml')
+pipeline = LectraAIPipeline('config.yaml')
 
 # Process audio
 result = pipeline.process('input.wav', output_dir='outputs')
@@ -683,4 +683,4 @@ pip install noisereduce
 
 **Last Updated**: May 2026  
 **Version**: 1.0.0  
-**Maintainer**: Voice Cleaning Pipeline Project
+**Maintainer**: Lectra AI Project

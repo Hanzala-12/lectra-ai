@@ -1,5 +1,5 @@
 """
-Main Voice Cleaning Pipeline
+Main Lectra AI Pipeline
 Orchestrates the complete processing workflow
 """
 
@@ -17,28 +17,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from media_loader import MediaLoader
-from vad_processor import VADProcessor
-from deepfilter_processor import DeepFilterProcessor
-from diarization import SpeakerDiarization
-from asr_processor import ASRProcessor
-from cache_manager import FileCache
-
-# Optional custom DSP modules
 try:
-    from audio_quality_profiler import AudioQualityProfiler
-    from audio_quality_metrics import AudioQualityMetrics
-    from spectral_restoration import SpectralRestoration
-    from adaptive_router import AdaptiveRouter
+    from .media_loader import MediaLoader
+    from .vad_processor import VADProcessor
+    from .deepfilter_processor import DeepFilterProcessor
+    from .diarization import SpeakerDiarization
+    from .asr_processor import ASRProcessor
+    from .cache_manager import FileCache
+except ImportError:
+    from media_loader import MediaLoader
+    from vad_processor import VADProcessor
+    from deepfilter_processor import DeepFilterProcessor
+    from diarization import SpeakerDiarization
+    from asr_processor import ASRProcessor
+    from cache_manager import FileCache
 
-    CUSTOM_DSP_AVAILABLE = True
-except ImportError as e:
-    CUSTOM_DSP_AVAILABLE = False
-    logger.warning(f"Custom DSP modules not available: {e}")
+
+def _load_optional_class(module_name: str, class_name: str):
+    """Load an optional DSP class using either package or flat-module imports."""
+    module = None
+    if __package__:
+        try:
+            module = __import__(f"{__package__}.{module_name}", fromlist=[class_name])
+        except ImportError:
+            module = None
+
+    if module is None:
+        try:
+            module = __import__(module_name, fromlist=[class_name])
+        except ImportError as exc:
+            logger.warning("Optional module %s unavailable: %s", module_name, exc)
+            return None
+
+    return getattr(module, class_name, None)
 
 
-class VoiceCleaningPipeline:
-    """Main pipeline for voice cleaning with your optimized workflow"""
+class LectraAIPipeline:
+    """Main pipeline for Lectra AI with your optimized workflow"""
 
     def __init__(self, config_path: str = "config.yaml", enable_cache: bool = True):
         """
@@ -135,8 +150,13 @@ class VoiceCleaningPipeline:
         # If running via CLI (clean_voice.py), it will be lazy-initialised on first call to process().
         self.asr = None
 
-        # Initialize custom DSP modules (if enabled and available)
-        self._initialize_custom_modules()
+        # Optional DSP modules are initialized lazily inside process() so they
+        # only load when the corresponding config flags are enabled.
+        self.profiler = None
+        self.quality_metrics = None
+        self.spectral_restoration = None
+        self.adaptive_router = None
+        self._custom_modules_initialized = False
 
         logger.info(
             "All components initialized successfully (ASR will load on first use)"
@@ -144,45 +164,65 @@ class VoiceCleaningPipeline:
 
     def _initialize_custom_modules(self):
         """Initialize optional custom DSP modules"""
-        if not CUSTOM_DSP_AVAILABLE:
-            self.profiler = None
-            self.quality_metrics = None
-            self.spectral_restoration = None
-            self.adaptive_router = None
+        if self._custom_modules_initialized:
             return
 
         # Audio Quality Profiler
         if self.config.get("profiler", {}).get("enabled", False):
-            wavelet = self.config["profiler"].get("wavelet", "db8")
-            self.profiler = AudioQualityProfiler(
-                sample_rate=self.sample_rate, wavelet=wavelet
+            profiler_class = _load_optional_class(
+                "audio_quality_profiler", "AudioQualityProfiler"
             )
-            logger.info("Audio Quality Profiler enabled")
+            if profiler_class is not None:
+                wavelet = self.config["profiler"].get("wavelet", "db8")
+                self.profiler = profiler_class(
+                    sample_rate=self.sample_rate, wavelet=wavelet
+                )
+                logger.info("Audio Quality Profiler enabled")
+            else:
+                self.profiler = None
         else:
             self.profiler = None
 
         # Quality Metrics
         if self.config.get("quality_metrics", {}).get("enabled", False):
-            self.quality_metrics = AudioQualityMetrics(sample_rate=self.sample_rate)
-            logger.info("Audio Quality Metrics enabled")
+            metrics_class = _load_optional_class(
+                "audio_quality_metrics", "AudioQualityMetrics"
+            )
+            if metrics_class is not None:
+                self.quality_metrics = metrics_class(sample_rate=self.sample_rate)
+                logger.info("Audio Quality Metrics enabled")
+            else:
+                self.quality_metrics = None
         else:
             self.quality_metrics = None
 
         # Spectral Restoration
         if self.config.get("spectral_restoration", {}).get("enabled", False):
-            self.spectral_restoration = SpectralRestoration(
-                sample_rate=self.sample_rate
+            restoration_class = _load_optional_class(
+                "spectral_restoration", "SpectralRestoration"
             )
-            logger.info("Spectral Restoration enabled")
+            if restoration_class is not None:
+                self.spectral_restoration = restoration_class(
+                    sample_rate=self.sample_rate
+                )
+                logger.info("Spectral Restoration enabled")
+            else:
+                self.spectral_restoration = None
         else:
             self.spectral_restoration = None
 
         # Adaptive Router
         if self.config.get("adaptive_router", {}).get("enabled", False):
-            self.adaptive_router = AdaptiveRouter(sample_rate=self.sample_rate)
-            logger.info("Adaptive Router enabled")
+            router_class = _load_optional_class("adaptive_router", "AdaptiveRouter")
+            if router_class is not None:
+                self.adaptive_router = router_class(sample_rate=self.sample_rate)
+                logger.info("Adaptive Router enabled")
+            else:
+                self.adaptive_router = None
         else:
             self.adaptive_router = None
+
+        self._custom_modules_initialized = True
 
     def _merge_segments(
         self, segments: List[Tuple[int, int]], max_length: int
@@ -267,7 +307,7 @@ class VoiceCleaningPipeline:
                     "processing_time": elapsed,
                     "from_cache": True,
                 }
-        logger.info(f"Starting voice cleaning pipeline for: {input_path}")
+        logger.info(f"Starting Lectra AI pipeline for: {input_path}")
         logger.info("=" * 70)
 
         output_dir = Path(output_dir)
@@ -280,6 +320,9 @@ class VoiceCleaningPipeline:
         logger.info(
             f"Loaded {len(audio)/sr:.2f}s from {'video' if is_video else 'audio'}"
         )
+
+        # Initialize optional custom DSP modules only when a file is actually processed.
+        self._initialize_custom_modules()
 
         # STEP 1.5: Audio Quality Profiling (optional)
         audio_profile = None

@@ -1,4 +1,4 @@
-# Voice Cleaning Pipeline with Custom DSP Enhancements
+# Lectra AI with Custom DSP Enhancements
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -106,7 +106,7 @@ docker-compose up --build
 │   ├── spectral_restoration.py        # [CUSTOM] Post-processing
 │   ├── audio_quality_metrics.py       # [CUSTOM] Quality evaluation
 │   ├── adaptive_router.py             # [CUSTOM] Smart routing
-│   └── optimized_utils.py             # [CUSTOM] Performance optimization
+│   └── optimized_utils.py             # [CUSTOM] Benchmark/helper utilities
 ├── tests/                     # Test suite
 ├── examples/                  # Demo scripts
 ├── notebooks/                 # Jupyter notebooks
@@ -121,7 +121,9 @@ docker-compose up --build
 
 ## Custom DSP Modules
 
-This project includes **five optional custom DSP modules** for research and experimentation:
+This project includes **four custom DSP stages plus one benchmark/helper module** for research and experimentation:
+
+Four modules are lazily loaded inside `src/pipeline.py` behind config flags. `optimized_utils` remains a support module for benchmarks and tests rather than a live processing stage.
 
 ### [Experimental] Custom Modules (Disabled by Default)
 
@@ -246,6 +248,16 @@ quality_metrics:
 **Note**: These modules are experimental and may affect processing time and quality. Use with caution in production.
 
 For detailed documentation, see [docs/CUSTOM_DSP.md](docs/CUSTOM_DSP.md).
+
+---
+
+## Roadmap
+
+The following features are planned or in progress for future releases:
+
+- **Quiz Generation** - Automatically generate quizzes from lecture transcripts. *(In progress: static frontend page exists, backend generation not yet implemented)*
+- **AI-Powered Study Notes** - Summarize lectures into key points and study notes. *(Planned: no dedicated backend exists yet)*
+- **RAG Chatbot** - Ask questions about lecture content and get answers from the transcript. *(In progress: placeholder chat UI exists, backend retrieval/generation pending)*
 
 ---
 
@@ -510,8 +522,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you use this project in your research, please cite:
 
 ```bibtex
-@software{voice_cleaning_pipeline,
-  title = {Voice Cleaning Pipeline with Custom DSP Enhancements},
+@software{lectra_ai,
+  title = {Lectra AI with Custom DSP Enhancements},
   year = {2026},
   author = {Hanzala-12 and contributors},
   url = {https://github.com/Hanzala-12/voice-cleaning-pipeline}

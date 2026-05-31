@@ -1,5 +1,5 @@
 """
-FastAPI Backend Server for Voice Cleaning Pipeline
+FastAPI Backend Server for Lectra AI
 """
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
@@ -42,7 +42,7 @@ except ImportError:
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from pipeline import VoiceCleaningPipeline  # type: ignore
+from pipeline import LectraAIPipeline  # type: ignore
 
 # Setup structured logging
 logging.basicConfig(
@@ -73,9 +73,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Voice Cleaning API",
+    title="Lectra AI API",
     version="1.0.0",
-    description="AI-powered voice cleaning with DeepFilterNet and Whisper",
+    description="AI-powered audio cleaning with DeepFilterNet and Whisper",
     lifespan=lifespan,
 )
 
@@ -138,7 +138,7 @@ def initialize_pipeline(config: ProcessingConfig):
         with open("config.yaml") as _f:
             _cfg = _yaml.safe_load(_f)
         _cache_enabled = _cfg.get("cache", {}).get("enabled", False)
-        pipeline = VoiceCleaningPipeline("config.yaml", enable_cache=_cache_enabled)
+        pipeline = LectraAIPipeline("config.yaml", enable_cache=_cache_enabled)
 
     # Skip ASR initialisation entirely when asr.skip is true
     asr_skip = pipeline.config.get("asr", {}).get("skip", False)
@@ -167,7 +167,7 @@ def initialize_pipeline(config: ProcessingConfig):
 @app.get("/")
 async def root():
     """API root endpoint"""
-    return {"name": "Voice Cleaning API", "version": "1.0.0", "status": "running"}
+    return {"name": "Lectra AI API", "version": "1.0.0", "status": "running"}
 
 
 @app.get("/api/health")
@@ -512,7 +512,7 @@ async def download_file(filename: str):
 
 
 if __name__ == "__main__":
-    print("Starting Voice Cleaning API Server...")
+    print("Starting Lectra AI API Server...")
     print("Server running at: http://localhost:8000")
     print("API Docs: http://localhost:8000/docs")
     print("Health Check: http://localhost:8000/api/health")

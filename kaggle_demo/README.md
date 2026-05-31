@@ -1,6 +1,6 @@
-# Voice Cleaning Pipeline - Kaggle Demo
+# Lectra AI - Kaggle Demo
 
-This folder contains a standalone Kaggle-ready demonstration of the custom DSP modules from the Voice Cleaning Pipeline project.
+This folder contains a standalone Kaggle-ready demonstration of the custom DSP modules from the Lectra AI project.
 
 ## Contents
 
@@ -23,7 +23,7 @@ This folder contains a standalone Kaggle-ready demonstration of the custom DSP m
    - Go to https://www.kaggle.com/datasets
    - Click "New Dataset"
    - Upload `kaggle_demo.zip`
-   - Set title: "Voice Cleaning DSP Demo"
+   - Set title: "Lectra AI DSP Demo"
 
 3. Create a new notebook and add the dataset
 

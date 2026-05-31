@@ -1,4 +1,4 @@
-# Voice Cleaning Pipeline Configuration
+# Lectra AI Configuration
 
 audio:
   sample_rate: 16000  # 16kHz for optimal processing

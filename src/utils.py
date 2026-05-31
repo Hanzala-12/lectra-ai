@@ -1,4 +1,4 @@
-"""Utility functions for the voice cleaning pipeline"""
+"""Utility functions for Lectra AI"""
 
 import os
 import numpy as np

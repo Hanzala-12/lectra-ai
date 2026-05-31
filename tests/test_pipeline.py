@@ -1,5 +1,5 @@
 """
-Basic unit tests for voice cleaning pipeline
+Basic unit tests for Lectra AI pipeline
 """
 
 import pytest
@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch, MagicMock
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from pipeline import VoiceCleaningPipeline
+from pipeline import LectraAIPipeline
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def pipeline():
         mock_asr.return_value = MagicMock()
         mock_diarization.return_value = MagicMock()
 
-        pipeline = VoiceCleaningPipeline(str(config_path))
+        pipeline = LectraAIPipeline(str(config_path))
         return pipeline
 
 
@@ -66,7 +66,7 @@ def test_config_loading():
         mock_asr.return_value = MagicMock()
         mock_diarization.return_value = MagicMock()
 
-        pipeline = VoiceCleaningPipeline(str(config_path))
+        pipeline = LectraAIPipeline(str(config_path))
 
         assert "audio" in pipeline.config
         assert "vad" in pipeline.config
