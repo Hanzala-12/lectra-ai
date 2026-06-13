@@ -9,6 +9,15 @@ import sys
 import os
 from pathlib import Path
 
+# Load .env so HF_TOKEN (diarization) and other settings are available in CLI mode,
+# matching backend.py behaviour. Without this, diarization silently falls back to VAD.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 

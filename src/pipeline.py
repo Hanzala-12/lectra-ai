@@ -10,12 +10,194 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
+from scipy.ndimage import uniform_filter1d
+from scipy.signal import lfilter
 
 # Setup logging early so optional import fallbacks can use logger safely
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def adaptive_gain_ride(audio: np.ndarray, sr: int = 16000) -> np.ndarray:
+    """
+    Adaptive per-frame gain riding to correct dimness caused by DeepFilterNet
+    over-suppression in the 1-3kHz speech presence band.
+    Replaces static peak normalization.
+    """
+    TARGET_RMS_DB = -18.0
+    TARGET_RMS = 10 ** (TARGET_RMS_DB / 20)
+    FRAME_LEN = int(sr * 0.03)
+    HOP_LEN = int(sr * 0.010)
+    MAX_GAIN_DB = (
+        6.0  # was 10 — lower so quiet frames aren't over-boosted (reduces pumping)
+    )
+    MIN_GAIN_DB = -3.0
+    SPEECH_FLOOR = 0.012  # was 0.004 (~-48dB) — raised to ~-38dB so quiet noise-only
+    # frames between words are NOT boosted (that was lifting the background noise floor)
+    ATTACK_SMOOTH = int(0.08 / (HOP_LEN / sr))
+    RELEASE_SMOOTH = int(0.25 / (HOP_LEN / sr))
+
+    num_hops = (len(audio) - FRAME_LEN) // HOP_LEN
+
+    # Per-hop RMS
+    rms_curve = np.array(
+        [
+            np.sqrt(np.mean(audio[i * HOP_LEN : i * HOP_LEN + FRAME_LEN] ** 2))
+            for i in range(num_hops)
+        ]
+    )
+
+    # Raw gain needed per hop
+    gain_raw = np.ones(num_hops)
+    for i in range(num_hops):
+        rms = rms_curve[i]
+        if rms >= SPEECH_FLOOR:
+            needed_db = np.clip(
+                20 * np.log10(TARGET_RMS / (rms + 1e-10)), MIN_GAIN_DB, MAX_GAIN_DB
+            )
+            gain_raw[i] = 10 ** (needed_db / 20)
+
+    # Asymmetric smoothing (attack faster than release)
+    gain_smooth = gain_raw.copy()
+    for i in range(1, num_hops):
+        alpha = (
+            1 - np.exp(-1 / ATTACK_SMOOTH)
+            if gain_raw[i] < gain_smooth[i - 1]
+            else 1 - np.exp(-1 / RELEASE_SMOOTH)
+        )
+        gain_smooth[i] = gain_smooth[i - 1] + alpha * (gain_raw[i] - gain_smooth[i - 1])
+
+    gain_smooth = uniform_filter1d(gain_smooth, size=5)
+
+    # Apply gain frame by frame
+    output = audio.copy()
+    for i in range(num_hops):
+        s = i * HOP_LEN
+        e = min(s + HOP_LEN, len(output))
+        output[s:e] *= gain_smooth[i]
+    if num_hops * HOP_LEN < len(output):
+        output[num_hops * HOP_LEN :] *= gain_smooth[-1]
+
+    # Brick wall limiter — no clipping ever
+    peak = np.max(np.abs(output))
+    if peak > 0.93:
+        output *= 0.93 / peak
+
+    return output
+
+
+def eq_clarity_boost(audio: np.ndarray, sr: int = 16000) -> np.ndarray:
+    """
+    Targeted EQ correction for DeepFilterNet's over-suppression
+    of the 800Hz-2kHz clarity band (~10dB loss measured).
+    Applies a gentle shelving boost centered at 1.2kHz.
+    """
+    BOOST_DB = 3.5  # was 5.0 — consonants are already restored by the dry mix; lower
+    # boost avoids amplifying residual noise in the 1.2kHz band
+    CENTER_HZ = 1200.0
+    BANDWIDTH_OCT = 1.5
+
+    # Convert to peak EQ biquad via bilinear transform
+    # Using a simple bandpass boost approach
+    w0 = 2 * np.pi * CENTER_HZ / sr
+    bw = BANDWIDTH_OCT * np.log(2) / 2
+    Q = 1 / (2 * np.sinh(bw))
+
+    A = 10 ** (BOOST_DB / 40)
+    alpha = np.sin(w0) / (2 * Q)
+
+    b0 = 1 + alpha * A
+    b1 = -2 * np.cos(w0)
+    b2 = 1 - alpha * A
+    a0 = 1 + alpha / A
+    a1 = -2 * np.cos(w0)
+    a2 = 1 - alpha / A
+
+    b = np.array([b0 / a0, b1 / a0, b2 / a0])
+    a = np.array([1.0, a1 / a0, a2 / a0])
+
+    boosted = lfilter(b, a, audio)
+
+    # Safety peak limit after EQ (EQ can push peaks up)
+    peak = np.max(np.abs(boosted))
+    if peak > 0.93:
+        boosted *= 0.93 / peak
+
+    return boosted.astype(audio.dtype)
+
+
+def compute_adaptive_thresholds(audio: np.ndarray, sr: int = 16000) -> dict:
+    """
+    Computes silence threshold, min segment duration, and merge gap
+    dynamically from the audio's own noise floor and speech rhythm.
+    Works correctly for any recording — quiet, loud, clean, noisy.
+    """
+    frame_len = int(sr * 0.025)
+    hop_len = int(sr * 0.010)
+    n_frames = max(1, (len(audio) - frame_len) // hop_len)
+
+    rms = np.array(
+        [
+            np.sqrt(np.mean(audio[i * hop_len : i * hop_len + frame_len] ** 2))
+            for i in range(n_frames)
+        ]
+    )
+
+    noise_floor = np.percentile(rms, 5)
+    speech_level = np.percentile(rms, 70)
+    silence_threshold = noise_floor + (speech_level - noise_floor) * 0.15
+    silence_threshold = max(silence_threshold, 1e-4)
+
+    is_speech = (rms > silence_threshold).astype(int)
+    transitions = np.diff(is_speech)
+    onsets = np.where(transitions == 1)[0]
+    offsets = np.where(transitions == -1)[0]
+
+    seg_lengths_ms = []
+    for on, off in zip(onsets, offsets):
+        if off > on:
+            seg_lengths_ms.append((off - on) * hop_len / sr * 1000)
+
+    gaps_ms = []
+    for i in range(min(len(offsets), len(onsets) - 1)):
+        gap = (onsets[i + 1] - offsets[i]) * hop_len / sr * 1000
+        if gap > 0:
+            gaps_ms.append(gap)
+
+    if seg_lengths_ms:
+        min_seg_ms = float(np.clip(np.percentile(seg_lengths_ms, 25), 80, 250))
+    else:
+        min_seg_ms = 120.0
+
+    if gaps_ms:
+        merge_gap_ms = float(np.clip(np.percentile(gaps_ms, 40), 150, 500))
+    else:
+        merge_gap_ms = 250.0
+
+    median_seg = np.median(seg_lengths_ms) if seg_lengths_ms else 200.0
+    tail_pad_ms = float(np.clip(median_seg * 0.12, 20, 80))
+
+    return {
+        "silence_threshold": silence_threshold,
+        "min_segment_ms": min_seg_ms,
+        "merge_gap_ms": merge_gap_ms,
+        "tail_pad_ms": tail_pad_ms,
+    }
+
+
+def apply_pre_processing(audio: np.ndarray, sr: int = 16000) -> np.ndarray:
+    """
+    Final peak safety normalization only.
+    """
+
+    peak = np.max(np.abs(audio))
+    if peak > 0.95:
+        audio = audio * (0.95 / peak)
+
+    return audio
+
 
 try:
     from .media_loader import MediaLoader
@@ -99,7 +281,7 @@ class LectraAIPipeline:
             "deepfilternet": {
                 "model": "DeepFilterNet3",
                 "post_filter": True,
-                "atten_lim_db": 100.0,
+                "atten_lim_db": 30.0,
             },
             "diarization": {"enabled": True, "min_speakers": 1, "max_speakers": 10},
             "asr": {"model": "base", "language": "en", "compute_type": "float16"},
@@ -130,11 +312,42 @@ class LectraAIPipeline:
         # DeepFilterNet processor
         dfn_config = self.config["deepfilternet"]
         self.deepfilter = DeepFilterProcessor(
-            double_pass=dfn_config.get("double_pass", False),
+            double_pass=False,  # ENHANCEMENT 2: DOUBLE-PASS (controlled in pipeline loop)
             model_name=dfn_config["model"],
             post_filter=dfn_config["post_filter"],
-            atten_lim_db=dfn_config.get("atten_lim_db", 100.0),
+            atten_lim_db=float(dfn_config.get("atten_lim_db", 30.0)),
         )
+        # Fraction of the original (pre-DFN) speech blended back after enhancement.
+        # Refills the low-energy gaps DeepFilterNet over-suppresses (quiet consonants,
+        # syllable transitions, weaker overlapping voice) → no "missing syllables".
+        self.dry_wet_mix = float(dfn_config.get("dry_wet_mix", 0.0))
+        # High-pass the dry signal before blending so only the mid/high band (where
+        # syllables live) is restored — the low-frequency noise/rumble stays removed.
+        # 0 disables the HPF (legacy full-band crossfade behaviour).
+        self.dry_mix_hpf_hz = float(dfn_config.get("dry_mix_hpf_hz", 0.0))
+        # Low-band-only stationary denoise to remove residual low-frequency rumble.
+        lbd = self.config.get("low_band_denoise", {})
+        self.low_band_denoise_enabled = bool(lbd.get("enabled", False))
+        self.low_band_denoise_cutoff_hz = float(lbd.get("cutoff_hz", 700))
+        self.low_band_denoise_strength = float(lbd.get("strength", 0.85))
+
+        # Neural enhancer (MetricGAN+) — final neural denoise after DeepFilterNet.
+        # Light, faster-than-realtime on CPU, bounded spectral mask (no artifacts).
+        self.neural_enhancer = None
+        ne_cfg = self.config.get("neural_enhancer", {})
+        if ne_cfg.get("enabled", False):
+            enhancer_class = _load_optional_class(
+                "metricgan_processor", "MetricGANProcessor"
+            )
+            if enhancer_class is not None:
+                try:
+                    self.neural_enhancer = enhancer_class(device="cpu")
+                    logger.info("Neural enhancer (MetricGAN+) enabled")
+                except Exception as e:
+                    logger.warning(
+                        f"Neural enhancer unavailable, continuing without it: {e}"
+                    )
+                    self.neural_enhancer = None
 
         # Diarization (optional)
         if self.config["diarization"]["enabled"]:
@@ -225,9 +438,12 @@ class LectraAIPipeline:
         self._custom_modules_initialized = True
 
     def _merge_segments(
-        self, segments: List[Tuple[int, int]], max_length: int
+        self,
+        segments: List[Tuple[int, int]],
+        max_length: int,
+        max_gap_samples: int = 0,
     ) -> List[Tuple[int, int]]:
-        """Merge overlapping sample segments and clip to valid audio bounds."""
+        """Merge overlapping or nearby sample segments and clip to valid audio bounds."""
         normalized = []
         for start, end in segments:
             start = max(0, int(start))
@@ -243,7 +459,7 @@ class LectraAIPipeline:
 
         for start, end in normalized[1:]:
             prev_start, prev_end = merged[-1]
-            if start <= prev_end:
+            if start <= prev_end + max_gap_samples:
                 merged[-1] = (prev_start, max(prev_end, end))
             else:
                 merged.append((start, end))
@@ -321,6 +537,26 @@ class LectraAIPipeline:
             f"Loaded {len(audio)/sr:.2f}s from {'video' if is_video else 'audio'}"
         )
 
+        thresholds = compute_adaptive_thresholds(audio, sr=sr)
+        logger.info(
+            f"[adaptive] silence_threshold={thresholds['silence_threshold']:.5f}"
+        )
+        logger.info(
+            f"[adaptive] min_seg={thresholds['min_segment_ms']:.0f}ms  "
+            f"merge_gap={thresholds['merge_gap_ms']:.0f}ms  "
+            f"tail_pad={thresholds['tail_pad_ms']:.0f}ms"
+        )
+        self.vad_processor.silence_threshold = thresholds["silence_threshold"]
+        self.vad_processor.min_speech_duration_ms = int(thresholds["min_segment_ms"])
+        self.vad_processor.min_speech_frames = max(
+            1,
+            int(
+                np.ceil(
+                    thresholds["min_segment_ms"] / self.vad_processor.frame_duration_ms
+                )
+            ),
+        )
+
         # Initialize optional custom DSP modules only when a file is actually processed.
         self._initialize_custom_modules()
 
@@ -361,10 +597,42 @@ class LectraAIPipeline:
                 end_i = min(int(seg["end"] * sr), len(audio))
                 if end_i > start_i:
                     speech_segments.append((start_i, end_i))
-            speech_segments = self._merge_segments(speech_segments, len(audio))
+            speech_segments = self._merge_segments(
+                speech_segments,
+                len(audio),
+                max_gap_samples=int(thresholds["merge_gap_ms"] / 1000 * sr),
+            )
         else:
             logger.info("No diarization — using VAD for speech boundaries")
             _, speech_segments = self.vad_processor.trim_silence(audio)
+
+        # ENHANCEMENT 3: VAD-FILTER (Tighten Minimum Segment Duration)
+        min_segment_ms = thresholds["min_segment_ms"]
+        min_segment_samples = int(min_segment_ms / 1000 * sr)
+        filtered_segments = []
+        dropped_count = 0
+        for start, end in speech_segments:
+            if end - start >= min_segment_samples:
+                filtered_segments.append((start, end))
+            else:
+                dropped_count += 1
+        speech_segments = filtered_segments
+        if dropped_count > 0:
+            logger.info(
+                f"Dropped {dropped_count} segments as sub-threshold noise transients (<{min_segment_ms}ms)"
+            )
+
+        tail_pad_samples = int(thresholds["tail_pad_ms"] / 1000 * sr)
+        padded_segments = []
+        for start, end in speech_segments:
+            padded_end = min(end + tail_pad_samples, len(audio))
+            if padded_end > start:
+                padded_segments.append((start, padded_end))
+        speech_segments = self._merge_segments(
+            padded_segments,
+            len(audio),
+            max_gap_samples=int(thresholds["merge_gap_ms"] / 1000 * sr),
+        )
 
         logger.info(f"{len(speech_segments)} speech segment(s) to process")
 
@@ -372,8 +640,27 @@ class LectraAIPipeline:
         # This eliminates ALL background noise between words and speakers.
         logger.info("\nSTEP 3: Placing speech on silent background")
         clean_base = np.zeros(len(audio), dtype=np.float32)
+
+        # ENHANCEMENT 1: HPF (High-Pass Filter PRE-DeepFilterNet)
+        hpf_config = self.config.get("high_pass_filter", {})
+        hpf_enabled = hpf_config.get("enabled", False)
+        hpf_cutoff = hpf_config.get("cutoff_hz", 120)
+
+        sos = None
+        if hpf_enabled:
+            import scipy.signal as signal
+
+            cutoff = min(hpf_cutoff, 150)  # Constraint: Do not exceed 150 Hz
+            sos = signal.butter(4, cutoff, btype="highpass", output="sos", fs=sr)
+            logger.info(
+                f"Applying 4th-order Butterworth HPF at {cutoff}Hz to speech segments"
+            )
+
         for start, end in speech_segments:
-            clean_base[start:end] = audio[start:end]
+            seg_audio = audio[start:end]
+            if sos is not None:
+                seg_audio = signal.sosfilt(sos, seg_audio)
+            clean_base[start:end] = seg_audio
 
         # STEP 3.5: Adaptive Router (optional) - try lighter methods first
         use_deepfilter = True
@@ -403,39 +690,18 @@ class LectraAIPipeline:
                 ):
                     use_deepfilter = True
 
-        # STEP 4: Per-segment DeepFilterNet noise removal (optimised)
+        # STEP 4: Full-file DeepFilterNet noise removal
         if use_deepfilter:
-            # Key speedups:
-            #   • Merge nearby segments (≤200 ms gap) → fewer model calls
-            #   • Pre-resample clean_base to 48 kHz once → eliminates N input resamples
-            #   • Collect all output in 48 kHz domain, resample back once at the end
-            logger.info("\nSTEP 4: Per-segment DeepFilterNet noise removal (optimised)")
+            logger.info("\nSTEP 4: Full-file DeepFilterNet noise removal")
 
             import librosa as _lib
 
             df_sr = self.deepfilter.sample_rate  # 48000
+            logger.info("[pipeline] DeepFilterNet mode: full-file")
+            logger.info("[pipeline] second pass: disabled")
+            logger.info(f"[pipeline] atten_lim_db: {self.deepfilter.atten_lim_db}")
 
-            # ── Merge nearby segments to reduce total model calls ─────────────────
-            MERGE_GAP_MS = 200
-            gap_samples = int(MERGE_GAP_MS / 1000 * sr)
-            if len(speech_segments) > 1:
-                proc_segs = [speech_segments[0]]
-                for seg_s, seg_e in speech_segments[1:]:
-                    prev_s, prev_e = proc_segs[-1]
-                    if seg_s - prev_e <= gap_samples:
-                        proc_segs[-1] = (prev_s, max(prev_e, seg_e))
-                    else:
-                        proc_segs.append((seg_s, seg_e))
-            else:
-                proc_segs = list(speech_segments)
-            n_segs = len(proc_segs)
-            logger.info(
-                f"  {len(speech_segments)} diarization segments → "
-                f"{n_segs} processing segments (merged ≤{MERGE_GAP_MS}ms gaps)"
-            )
-
-            # ── Pre-resample clean_base once to DeepFilterNet's native SR ─────────
-            df_factor = df_sr / sr  # 3.0  (16 kHz → 48 kHz)
+            df_factor = df_sr / sr
             clean_df_in = (
                 _lib.resample(clean_base, orig_sr=sr, target_sr=df_sr)
                 if sr != df_sr
@@ -443,40 +709,172 @@ class LectraAIPipeline:
             )
 
             n_df = int(np.ceil(len(clean_base) * df_factor))
-            enhanced_df = np.zeros(n_df, dtype=np.float32)
+            chunk_samples = int(30.0 * df_sr)
+            overlap_samples = int(2.0 * df_sr)
 
-            # ── Processing loop ───────────────────────────────────────────────────
-            for i, (start, end) in enumerate(proc_segs):
-                s_df_in = int(start * df_factor)
-                e_df_in = min(int(end * df_factor), len(clean_df_in))
-                seg_for_df = clean_df_in[s_df_in:e_df_in]
+            if len(clean_df_in) <= chunk_samples:
+                enhanced_df = self.deepfilter.process_audio_native(clean_df_in)
+            else:
+                logger.info(
+                    "  DeepFilterNet chunk fallback: 30s chunks with 2s overlap"
+                )
+                enhanced_df = np.zeros(len(clean_df_in), dtype=np.float32)
+                blend_weights = np.zeros(len(clean_df_in), dtype=np.float32)
+                step_samples = max(1, chunk_samples - 2 * overlap_samples)
+                chunk_starts = list(range(0, len(clean_df_in), step_samples))
+                final_start = max(0, len(clean_df_in) - chunk_samples)
+                if chunk_starts[-1] != final_start:
+                    chunk_starts.append(final_start)
+                chunk_starts = sorted(set(chunk_starts))
 
-                enh_seg = self.deepfilter.process_audio_native(seg_for_df)
+                for i, chunk_start in enumerate(chunk_starts):
+                    chunk_end = min(len(clean_df_in), chunk_start + chunk_samples)
+                    chunk = clean_df_in[chunk_start:chunk_end]
+                    chunk_enhanced = self.deepfilter.process_audio_native(chunk)
 
-                # Write result into the 48 kHz output array
-                s_df = int(start * df_factor)
-                e_df = min(int(end * df_factor), n_df)
-                seg_len_df = e_df - s_df
-                enh_seg = enh_seg[:seg_len_df]
-                if len(enh_seg) < seg_len_df:
-                    enh_seg = np.pad(enh_seg, (0, seg_len_df - len(enh_seg)))
-                enhanced_df[s_df:e_df] = enh_seg
+                    left_fade = overlap_samples if chunk_start > 0 else 0
+                    right_fade = overlap_samples if chunk_end < len(clean_df_in) else 0
 
-                if (i + 1) % 10 == 0 or (i + 1) == n_segs:
-                    logger.info(f"  Segment {i+1}/{n_segs} done")
+                    usable_start = chunk_start + left_fade
+                    usable_end = chunk_end - right_fade
+                    usable = chunk_enhanced[
+                        left_fade : (
+                            len(chunk_enhanced) - right_fade if right_fade > 0 else None
+                        )
+                    ]
 
-            # ── Single post-loop resample back to pipeline SR ─────────────────────
+                    if len(usable) == 0:
+                        continue
+
+                    window = np.ones(len(usable), dtype=np.float32)
+                    if left_fade > 0:
+                        window[:left_fade] = np.linspace(
+                            0.0, 1.0, left_fade, endpoint=False, dtype=np.float32
+                        )
+                    if right_fade > 0:
+                        window[-right_fade:] = np.minimum(
+                            window[-right_fade:],
+                            np.linspace(
+                                1.0, 0.0, right_fade, endpoint=False, dtype=np.float32
+                            ),
+                        )
+
+                    enhanced_df[usable_start:usable_end] += usable * window
+                    blend_weights[usable_start:usable_end] += window
+
+                    if (i + 1) % 5 == 0 or (i + 1) == len(chunk_starts):
+                        logger.info(f"  Chunk {i+1}/{len(chunk_starts)} done")
+
+                nonzero = blend_weights > 0
+                enhanced_df[nonzero] /= blend_weights[nonzero]
+
+            if len(enhanced_df) < n_df:
+                enhanced_df = np.pad(enhanced_df, (0, n_df - len(enhanced_df)))
+            elif len(enhanced_df) > n_df:
+                enhanced_df = enhanced_df[:n_df]
+
             if df_sr != sr:
                 enhanced_audio = _lib.resample(enhanced_df, orig_sr=df_sr, target_sr=sr)
             else:
                 enhanced_audio = enhanced_df
 
-            # Clip/pad to exact original length (resampling may drift ±1 sample)
             enhanced_audio = enhanced_audio[: len(clean_base)].astype(np.float32)
             if len(enhanced_audio) < len(clean_base):
                 enhanced_audio = np.pad(
                     enhanced_audio, (0, len(clean_base) - len(enhanced_audio))
                 )
+
+            # STEP 4b: Neural enhancer (MetricGAN+) — final neural denoise pass.
+            # DeepFilterNet removes the bulk; MetricGAN+ polishes the residual down
+            # toward inaudible (~40 dB speech-to-noise) without artifacts.
+            if self.neural_enhancer is not None:
+                try:
+                    logger.info("\nSTEP 4b: Neural enhancement (MetricGAN+)")
+                    enhanced_audio = self.neural_enhancer.enhance(
+                        enhanced_audio
+                    ).astype(np.float32)
+                    if len(enhanced_audio) < len(clean_base):
+                        enhanced_audio = np.pad(
+                            enhanced_audio, (0, len(clean_base) - len(enhanced_audio))
+                        )
+                    enhanced_audio = enhanced_audio[: len(clean_base)]
+                    logger.info("[pipeline] MetricGAN+ enhancement applied")
+                except Exception as e:
+                    logger.warning(f"Neural enhancement failed, using DFN output: {e}")
+
+            # Dry/wet blend: add a little of the original speech back so the
+            # quiet consonants/syllables DeepFilterNet gates out are restored.
+            # clean_base is zero outside speech segments, so no noise leaks into gaps.
+            if self.dry_wet_mix > 0.0:
+                dry = float(np.clip(self.dry_wet_mix, 0.0, 1.0))
+                if self.dry_mix_hpf_hz > 0.0:
+                    # Band-limited dry: high-pass so only mid/high (syllables) is added
+                    # back; low-frequency rumble stays suppressed. Additive — the dry
+                    # band is the high content DFN removed, not a level crossfade.
+                    import scipy.signal as _sig
+
+                    cutoff = float(np.clip(self.dry_mix_hpf_hz, 50.0, sr / 2 - 100))
+                    _sos = _sig.butter(4, cutoff, btype="highpass", output="sos", fs=sr)
+                    dry_band = _sig.sosfilt(_sos, clean_base).astype(np.float32)
+                    enhanced_audio = (enhanced_audio + dry * dry_band).astype(
+                        np.float32
+                    )
+                    logger.info(
+                        f"[pipeline] dry mix applied: +{dry:.0%} original above {cutoff:.0f}Hz"
+                    )
+                else:
+                    enhanced_audio = (
+                        (1.0 - dry) * enhanced_audio + dry * clean_base
+                    ).astype(np.float32)
+                    logger.info(
+                        f"[pipeline] dry/wet mix applied: {dry:.0%} original blended back"
+                    )
+
+            # Low-band-only denoise: kills the residual stationary low-frequency
+            # rumble without touching consonants. noisereduce is applied with the
+            # ACTUAL noise profile (a silent gap of the original), then only the
+            # low band of that result is kept; the high band (consonants) is left
+            # completely untouched. This is the surgical version of noisereduce —
+            # broadband NR would gate syllables; band-limiting it does not.
+            if self.low_band_denoise_enabled:
+                try:
+                    import noisereduce as _nr
+                    import scipy.signal as _sig2
+
+                    # Noise profile: lowest-energy 0.5s window of the original audio.
+                    win = int(0.5 * sr)
+                    if len(audio) > win:
+                        step = max(1, win // 2)
+                        starts = range(0, len(audio) - win, step)
+                        idx = min(
+                            starts,
+                            key=lambda i: float(np.mean(audio[i : i + win] ** 2)),
+                        )
+                        noise_clip = audio[idx : idx + win].astype(np.float32)
+
+                        denoised = _nr.reduce_noise(
+                            y=enhanced_audio,
+                            sr=sr,
+                            y_noise=noise_clip,
+                            stationary=True,
+                            prop_decrease=self.low_band_denoise_strength,
+                        ).astype(np.float32)
+
+                        cut = float(
+                            np.clip(self.low_band_denoise_cutoff_hz, 200.0, 2000.0)
+                        )
+                        lo = _sig2.butter(4, cut, btype="lowpass", output="sos", fs=sr)
+                        hi = _sig2.butter(4, cut, btype="highpass", output="sos", fs=sr)
+                        enhanced_audio = (
+                            _sig2.sosfilt(lo, denoised)
+                            + _sig2.sosfilt(hi, enhanced_audio)
+                        ).astype(np.float32)
+                        logger.info(
+                            f"[pipeline] low-band denoise applied below {cut:.0f}Hz "
+                            f"(strength {self.low_band_denoise_strength:.2f}) — rumble removed, consonants untouched"
+                        )
+                except Exception as e:
+                    logger.warning(f"Low-band denoise skipped: {e}")
 
         # STEP 4.5: Spectral Restoration (optional)
         if self.spectral_restoration is not None:
@@ -509,10 +907,34 @@ class LectraAIPipeline:
                 seg[-fade_samples:] *= fade_out
             final_audio[start:end] = seg
 
-        # Normalize to -0.5 dBFS
-        max_val = np.abs(final_audio).max()
-        if max_val > 0:
-            final_audio = (final_audio / max_val * 0.95).astype(np.float32)
+        # Adaptive gain riding replaces static peak normalization
+        audio_before_gain = final_audio.copy()
+        final_audio = adaptive_gain_ride(final_audio, sr=sr).astype(np.float32)
+        final_audio = eq_clarity_boost(final_audio, sr=sr).astype(np.float32)
+
+        # Final loudness normalization — keeps output at a consistent level no matter
+        # how much energy the denoising/rumble-removal stripped out (prevents "dim"
+        # output). Measured over speech-active samples only (zeros are excluded), then
+        # brick-wall limited so peaks never clip.
+        TARGET_RMS_DBFS = -20.0
+        active_samples = final_audio[np.abs(final_audio) > 1e-4]
+        if active_samples.size > 0:
+            cur_rms = float(np.sqrt(np.mean(active_samples**2)))
+            if cur_rms > 1e-6:
+                makeup = (10 ** (TARGET_RMS_DBFS / 20)) / cur_rms
+                makeup = float(np.clip(makeup, 0.25, 8.0))
+                final_audio = (final_audio * makeup).astype(np.float32)
+        peak = float(np.max(np.abs(final_audio))) if final_audio.size else 0.0
+        if peak > 0.97:
+            final_audio = (final_audio * (0.97 / peak)).astype(np.float32)
+        audio_after_gain = final_audio
+        logger.info(
+            f"[gain_rider] input RMS: {20*np.log10(np.sqrt(np.mean(audio_before_gain**2))+1e-10):.1f} dBFS"
+        )
+        logger.info(
+            f"[loudness] output RMS: {20*np.log10(np.sqrt(np.mean(audio_after_gain**2))+1e-10):.1f} dBFS "
+            f"(target {TARGET_RMS_DBFS:.0f}), peak {20*np.log10(peak+1e-10):.1f} dBFS"
+        )
 
         # STEP 6: Save cleaned audio
         logger.info("\nSTEP 6: Saving cleaned audio")

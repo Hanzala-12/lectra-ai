@@ -15,6 +15,10 @@ pydub>=0.25.1,<0.26.0
 # DeepFilterNet for noise reduction
 deepfilternet>=0.5.6,<0.6.0
 
+# Pre-processing
+nara-wpe>=0.0.11,<0.1.0
+pyrnnoise>=0.4.3,<0.5.0
+
 # Post-diarization spectral noise gating
 noisereduce>=3.0.0,<4.0.0
 
@@ -24,6 +28,8 @@ silero-vad>=5.1.0,<7.0.0
 
 # Diarization - tightly constrained to avoid resolution issues
 pyannote.audio>=3.1.0,<3.2.0
+# Neural speech enhancement — MetricGAN+ final denoise stage (also diarization backbone)
+speechbrain>=1.0.0,<1.1.0
 lightning>=2.4.0,<2.4.1
 torchmetrics>=1.6.1,<1.7.0
 lightning-utilities>=0.10.0,<0.12.0

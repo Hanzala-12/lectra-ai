@@ -5,17 +5,38 @@ audio:
   chunk_duration: 30  # seconds per chunk for processing
   
 vad:
+  min_segment_ms: 80  # ENHANCEMENT 3: drop segments shorter than this
   # Pre-VAD trim settings
   aggressiveness: 3  # 0-3, higher = more aggressive filtering
   frame_duration_ms: 30  # 10, 20, or 30 ms
   padding_duration_ms: 300  # padding around speech segments
   min_speech_duration_ms: 250  # minimum speech segment length
   
+high_pass_filter:
+  enabled: true       # ENHANCEMENT 1
+  cutoff_hz: 120      # ENHANCEMENT 1
+  
 deepfilternet:
   model: "DeepFilterNet3"  # DeepFilterNet2 or DeepFilterNet3
-  post_filter: true  # additional post-processing
-  atten_lim_db: 100  # max noise attenuation in dB — 100 = fully aggressive (no safety brakes)
-  double_pass: false  # run DeepFilterNet twice — 2nd pass scrubs residual overlapping noise
+  post_filter: false  # OFF: post-filter sharpens the mask and gates out quiet consonants/syllables
+  atten_lim_db: 30  # strong noise removal in the wet path; syllables are restored via the band-limited dry mix below
+  dry_wet_mix: 0.0   # OFF — MetricGAN+ now restores/cleans; dry mix no longer needed (it re-added noise)
+  dry_mix_hpf_hz: 800
+
+# Neural enhancer: MetricGAN+ runs AFTER DeepFilterNet as a final neural polish.
+# This is the "separator"-style denoiser — light, faster-than-realtime on CPU,
+# bounded spectral mask (no artifacts). Chain: DeepFilterNet -> MetricGAN+.
+# Gets ~40 dB speech-to-noise (perceptually clean) with words intact.
+neural_enhancer:
+  enabled: true     # set false to fall back to DeepFilterNet-only
+  model: "metricgan-plus-voicebank"
+
+low_band_denoise:
+  enabled: false    # OFF — MetricGAN+ handles the rumble now
+  cutoff_hz: 700
+  strength: 0.85
+  double_pass: false  # pass 1 only for this test
+  second_pass_attenuation_db: 60  # ENHANCEMENT 2
 
 diarization:
   enabled: true
@@ -23,7 +44,7 @@ diarization:
   max_speakers: 10
   
 asr:
-  skip: false  # enabled
+  skip: true  # disabled for now
   model: "turbo"  # tiny, base, small, medium, large, large-v3, turbo (recommended)
   language: null  # auto-detect if null
   compute_type: "int8"  # int8 (fastest on CPU), float16, or float32

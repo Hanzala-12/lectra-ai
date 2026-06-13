@@ -36,6 +36,7 @@ class VADProcessor:
         self.frame_duration_ms = frame_duration_ms
         self.padding_duration_ms = padding_duration_ms
         self.min_speech_duration_ms = min_speech_duration_ms
+        self.silence_threshold = None
 
         # Calculate frame properties
         self.frame_size = int(sample_rate * frame_duration_ms / 1000)
@@ -56,11 +57,17 @@ class VADProcessor:
         # Convert float32 to int16 for VAD
         frame_int16 = (frame * 32767).astype(np.int16)
         frame_bytes = struct.pack("%dh" % len(frame_int16), *frame_int16)
+        frame_rms = float(np.sqrt(np.mean(frame.astype(np.float64) ** 2)))
 
         try:
-            return self.vad.is_speech(frame_bytes, self.sample_rate)
+            vad_result = self.vad.is_speech(frame_bytes, self.sample_rate)
+            if self.silence_threshold is None:
+                return vad_result
+            return vad_result and frame_rms >= self.silence_threshold
         except:
-            return False
+            if self.silence_threshold is None:
+                return False
+            return frame_rms >= self.silence_threshold
 
     def detect_speech_segments(self, audio: np.ndarray) -> List[Tuple[int, int]]:
         """

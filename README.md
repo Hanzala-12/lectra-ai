@@ -12,11 +12,11 @@ This project combines state-of-the-art deep learning models with custom algorith
 
 ### Key Features
 
-- **State-of-Art Noise Removal**: DeepFilterNet3 deep learning model
-- **Speaker Diarization**: Automatic speaker identification using Pyannote
+- **Two-stage neural noise removal**: **DeepFilterNet3 → MetricGAN+** — DFN removes the bulk, MetricGAN+ polishes the residual to a near-silent floor (~39 dB speech-to-noise) without artifacts. See **[Noise Removal & Diarization pipeline](docs/NOISE_REMOVAL_AND_DIARIZATION.md)**.
+- **Speaker Diarization**: Automatic speaker identification using Pyannote 3.1 (drives both speech detection and per-speaker transcription)
 - **Speech Recognition**: faster-whisper turbo model for transcription
-- **Custom DSP Algorithms**: 2,950+ lines of hand-written signal processing code
-- **Performance Optimized**: 64x speedup on CPU-intensive operations
+- **CPU-friendly**: the full denoise chain runs faster-than-realtime on CPU (no GPU required)
+- **Custom DSP Algorithms**: hand-written signal processing (adaptive thresholds, gain-riding, clarity EQ, loudness normalization) plus optional experimental modules
 - **Web Interface**: React frontend + FastAPI backend
 - **Docker Support**: One-command deployment
 
@@ -98,7 +98,8 @@ docker-compose up --build
 ├── config.yaml                # Configuration settings
 ├── src/                       # Core modules
 │   ├── pipeline.py           # Main processing pipeline
-│   ├── deepfilter_processor.py
+│   ├── deepfilter_processor.py          # DeepFilterNet3 noise suppression
+│   ├── metricgan_processor.py           # MetricGAN+ neural enhancement (final polish)
 │   ├── vad_processor.py
 │   ├── diarization.py
 │   ├── asr_processor.py
@@ -263,6 +264,7 @@ The following features are planned or in progress for future releases:
 
 ## Documentation
 
+- **[Noise Removal & Diarization Pipeline](docs/NOISE_REMOVAL_AND_DIARIZATION.md)**: Full end-to-end signal chain, how each stage works, and the measured engineering decisions behind the clean result ⭐
 - **[Architecture](docs/ARCHITECTURE.md)**: System design and component overview
 - **[Custom DSP Modules](docs/CUSTOM_DSP.md)**: API reference and usage guide for experimental modules
 - **[Performance Optimization](docs/OPTIMIZATION.md)**: CPU optimization techniques and benchmarks
@@ -413,7 +415,8 @@ pytest tests -q: blocked in current environment by missing dependency `soundfile
 |-----------|-----------|---------|
 | **Backend** | FastAPI | REST API server |
 | **Frontend** | React 19 + TypeScript | Web interface |
-| **Noise Removal** | DeepFilterNet3 | Deep learning noise reduction |
+| **Noise Removal (stage 1)** | DeepFilterNet3 | Deep learning noise reduction |
+| **Noise Removal (stage 2)** | MetricGAN+ (SpeechBrain) | Neural enhancement / final polish |
 | **Speech Recognition** | faster-whisper Turbo | Transcription |
 | **Speaker Diarization** | Pyannote 3.1 | Speaker identification |
 | **DSP** | NumPy, SciPy | Signal processing |
@@ -432,27 +435,35 @@ pytest tests -q: blocked in current environment by missing dependency `soundfile
 
 ### config.yaml
 
-```yaml
-models:
-  deepfilter:
-    path: "models/deepfilter.ckpt"
-    device: "auto"  # auto/cpu/cuda
-  
-  whisper:
-    model: "turbo"  # turbo (recommended), large-v3, large, medium, small, base, tiny
-    language: "en"
-  
-  pyannote:
-    model: "pyannote/speaker-diarization-3.1"
+The key noise-removal and diarization settings (see
+[the pipeline doc](docs/NOISE_REMOVAL_AND_DIARIZATION.md#6-configuration-reference)
+for the full reference):
 
-processing:
+```yaml
+audio:
   sample_rate: 16000
-  vad_threshold: 0.5
-  chunk_duration: 30  # seconds
+
+deepfilternet:            # stage 1 — DeepFilterNet3
+  atten_lim_db: 30        # suppression strength
+  post_filter: false      # off → preserves quiet consonants
+  dry_wet_mix: 0.0        # original blended back (off; MetricGAN+ handles restoration)
+
+neural_enhancer:          # stage 2 — MetricGAN+ final polish
+  enabled: true           # set false for DeepFilterNet-only (faster, slightly noisier)
+  model: "metricgan-plus-voicebank"
+
+diarization:
+  enabled: true
+  min_speakers: 1
+  max_speakers: 10
+
+asr:
+  model: "turbo"          # turbo, large-v3, large, medium, small, base, tiny
+  language: null          # auto-detect
 
 output:
   format: "wav"
-  bitrate: "192k"
+  bit_depth: 16
 ```
 
 ---
@@ -510,6 +521,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - **DeepFilterNet**: Schröter et al. for the excellent noise removal model
+- **MetricGAN+ / SpeechBrain**: Fu et al. and the SpeechBrain team for the neural speech enhancement model
 - **faster-whisper**: Systran for the optimized Whisper implementation using CTranslate2
 - **Whisper**: OpenAI for the robust speech recognition model
 - **Pyannote**: Hervé Bredin for the speaker diarization toolkit
@@ -556,8 +568,8 @@ If you use this project in your research, please cite:
 
 ---
 
-**Status**: Production Ready Core + Experimental DSP Extensions  
-**Last Updated**: May 2026  
+**Status**: Production Ready — DeepFilterNet3 → MetricGAN+ noise removal + Pyannote diarization  
+**Last Updated**: June 2026  
 **Maintainer**: Hanzala-12
 
 ---

@@ -87,4 +87,31 @@ def test_asr_initialization(pipeline):
     assert hasattr(pipeline, "asr")
 
 
+def test_deepfilter_full_audio_mode(pipeline, tmp_path):
+    audio = np.random.randn(96000).astype(np.float32)
+    pipeline.config["asr"]["skip"] = True
+
+    pipeline.media_loader.load_media = Mock(return_value=(audio, 48000, False))
+    pipeline.media_loader.save_audio = Mock()
+    pipeline.vad_processor.trim_silence = Mock(return_value=(audio, [(0, len(audio))]))
+    pipeline.diarization.diarize = Mock(
+        return_value=[{"start": 0.5, "end": 1.5, "speaker": "SPEAKER_00"}]
+    )
+    pipeline.diarization.get_speaker_statistics = Mock(return_value={"SPEAKER_00": 1})
+    pipeline.deepfilter.sample_rate = 48000
+    pipeline.deepfilter.process_audio_native = Mock(side_effect=lambda segment: segment)
+
+    result = pipeline.process(
+        input_path="sample.wav",
+        output_dir=str(tmp_path),
+        save_transcript=False,
+    )
+
+    assert result["audio_output_path"]
+    assert pipeline.deepfilter.process_audio_native.call_count == 1
+    processed_segment = pipeline.deepfilter.process_audio_native.call_args.args[0]
+    assert len(processed_segment) == len(audio)
+    assert pipeline.config["deepfilternet"]["atten_lim_db"] == 30
+
+
 # Add more tests as needed
