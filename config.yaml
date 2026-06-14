@@ -35,8 +35,28 @@ low_band_denoise:
   enabled: false    # OFF — MetricGAN+ handles the rumble now
   cutoff_hz: 700
   strength: 0.85
-  double_pass: false  # pass 1 only for this test
-  second_pass_attenuation_db: 60  # ENHANCEMENT 2
+
+# Voice Beautify: post-cleaning master applied to the SPEECH SEGMENTS ONLY, after
+# all noise removal. Makes the clean voice sound smooth/natural instead of
+# "broken-speaker". SNR-guarded — if any stage would add noise it auto-disables.
+# Does NOT touch noise removal or diarization.
+beautify:
+  enabled: false                 # OFF — output is the raw 16kHz DFN->MetricGAN+ cleaned voice
+  target_loudness_dbfs: -19      # consistent broadcast-ish loudness
+  max_snr_drop_db: 6             # safety: abort a stage if speech-to-noise drops more than this
+  tone:
+    enabled: true                # gentle corrective EQ (tame boom, add clarity, de-harsh)
+  leveler:
+    enabled: true                # downward compression only — evens loud jumps, never boosts noise
+    strength: 0.7
+    gate_dbfs: -50               # never process below this (protects the residual floor)
+    # Air = a NATURAL high-band extension. It scales to the input's own HF (an
+    # anchor), so band-limited inputs (e.g. WhatsApp/Opus) get almost none and
+    # can't grow a harsh shelf. amount_db = how far BELOW that anchor the air sits.
+  air:
+    enabled: true                # synthesize subtle >8kHz "air"; output at higher sample rate
+    output_sr: 24000
+    amount_db: -9                # dB below the existing HF anchor (more negative = subtler)
 
 diarization:
   enabled: true

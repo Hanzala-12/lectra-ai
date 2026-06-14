@@ -62,6 +62,9 @@ goes *black* on a spectrogram while the voice and consonants remain.
 [9] Gain‑ride → clarity EQ → loudness norm       adaptive_gain_ride / eq_clarity_boost
    │     even levels, −20 dBFS target, brick‑wall limited
    ▼
+[9.5] (optional) Voice Beautify                  voice_beautify.py
+   │     tone EQ + loudness leveler + high‑band "air"; SNR‑guarded; OFF by default
+   ▼
 [10] Save cleaned WAV  (+ optional ASR/transcript, +video remux)
 ```
 
@@ -164,9 +167,32 @@ fades** at each segment edge to avoid clicks.
    scaled to a **−20 dBFS** target and brick‑wall limited to 0.97 peak. This is
    what keeps the output from going *dim* after heavy noise removal.
 
+### Step 9.5 — Voice Beautify (optional, off by default)
+A post‑cleaning "master" ([`voice_beautify.py`](../src/voice_beautify.py)) applied to
+the **speech segments only**, after all noise removal. It makes the clean voice sound
+smooth/natural instead of "boxy / broken‑speaker", and is **SNR‑guarded so it can
+never add noise back**:
+
+1. **Tone EQ** — gentle corrective curve (tame low‑mid boom, add clarity, de‑harsh).
+   Linear filtering → mathematically preserves SNR.
+2. **Leveler** — *downward‑only* compression (tames loud jumps, never boosts quiet
+   parts or the noise floor) + one linear makeup → even, broadcast‑consistent level.
+3. **Air** — a **natural** high‑band extension above 8 kHz, output at 24 kHz. It is
+   **adaptive**: it scales to the input's *own* HF energy (an anchor) and uses
+   smooth spectral translation, so a band‑limited input (e.g. WhatsApp/Opus) gets
+   almost none and can't grow a harsh shelf. Gated to speech.
+4. **Loudness + true‑peak limit**, then a re‑mask to keep the gaps perfectly silent.
+
+**Safety:** tone (linear) + downward compression + linear makeup are SNR‑preserving
+by construction; the air is speech‑gated and self‑limiting; and a guard measures
+speech‑to‑noise before/after and auto‑disables a stage (or the whole thing) if it
+would drop SNR beyond a small budget. `beautify.enabled: false` (the default) = the
+output is byte‑identical to the raw DeepFilterNet→MetricGAN+ result.
+
 ### Step 10 — Output
-Saved as 16‑bit WAV. If ASR is enabled it transcribes (per speaker when diarized);
-if the input was video, the cleaned audio is remuxed back.
+Saved as 16‑bit WAV (24 kHz when beautify+air is on, else 16 kHz). If ASR is enabled
+it transcribes (per speaker when diarized); if the input was video, the cleaned audio
+is remuxed back.
 
 ---
 
@@ -241,6 +267,14 @@ low_band_denoise:
   cutoff_hz: 700
   strength: 0.85
 
+beautify:                 # optional post‑cleaning master (speech only); OFF by default
+  enabled: false
+  target_loudness_dbfs: -19
+  max_snr_drop_db: 6      # guard: auto‑disable a stage if speech‑to‑noise drops more
+  tone:    { enabled: true }
+  leveler: { enabled: true, strength: 0.7, gate_dbfs: -50 }
+  air:     { enabled: true, output_sr: 24000, amount_db: -9 }  # dB below the input's own HF
+
 diarization:
   enabled: true
   min_speakers: 1
@@ -294,6 +328,7 @@ diarization:
 | [`src/diarization.py`](../src/diarization.py) | pyannote 3.1 speaker turns (+ VAD fallback) |
 | [`src/deepfilter_processor.py`](../src/deepfilter_processor.py) | DeepFilterNet3 wrapper (native 48 kHz, chunked) |
 | [`src/metricgan_processor.py`](../src/metricgan_processor.py) | MetricGAN+ enhancement (+ Windows/HF compat patches) |
+| [`src/voice_beautify.py`](../src/voice_beautify.py) | Optional post‑cleaning master: tone EQ, leveler, adaptive air (SNR‑guarded) |
 | [`src/vad_processor.py`](../src/vad_processor.py) | WebRTC VAD fallback speech detection |
 | [`src/media_loader.py`](../src/media_loader.py) | Load/resample/save, video remux |
 | [`config.yaml`](../config.yaml) | All tunable parameters |

@@ -17,6 +17,7 @@ This project combines state-of-the-art deep learning models with custom algorith
 - **Speech Recognition**: faster-whisper turbo model for transcription
 - **CPU-friendly**: the full denoise chain runs faster-than-realtime on CPU (no GPU required)
 - **Custom DSP Algorithms**: hand-written signal processing (adaptive thresholds, gain-riding, clarity EQ, loudness normalization) plus optional experimental modules
+- **Voice Beautify (optional)**: post-cleaning master applied to speech only — adaptive tone, loudness leveling, and high-band "air" — SNR-guarded so it never adds noise back. Off by default; see [`beautify`](config.yaml) in config.
 - **Web Interface**: React frontend + FastAPI backend
 - **Docker Support**: One-command deployment
 
@@ -100,6 +101,7 @@ docker-compose up --build
 │   ├── pipeline.py           # Main processing pipeline
 │   ├── deepfilter_processor.py          # DeepFilterNet3 noise suppression
 │   ├── metricgan_processor.py           # MetricGAN+ neural enhancement (final polish)
+│   ├── voice_beautify.py                # Optional post-cleaning master (tone/leveler/air)
 │   ├── vad_processor.py
 │   ├── diarization.py
 │   ├── asr_processor.py
@@ -451,6 +453,11 @@ deepfilternet:            # stage 1 — DeepFilterNet3
 neural_enhancer:          # stage 2 — MetricGAN+ final polish
   enabled: true           # set false for DeepFilterNet-only (faster, slightly noisier)
   model: "metricgan-plus-voicebank"
+
+beautify:                 # optional post-cleaning master (speech only)
+  enabled: false          # off by default; true → adaptive tone + leveler + 24kHz "air"
+  air:
+    amount_db: -9         # high-band extension level, relative to the input's own HF
 
 diarization:
   enabled: true

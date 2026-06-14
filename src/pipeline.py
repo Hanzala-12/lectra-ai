@@ -349,6 +349,22 @@ class LectraAIPipeline:
                     )
                     self.neural_enhancer = None
 
+        # Voice Beautify — post-cleaning master (tone/leveler/air) on speech only.
+        # Runs after all noise removal; makes the clean voice sound smooth/natural
+        # instead of "broken-speaker". SNR-guarded so it can't add noise back.
+        self.beautifier = None
+        if self.config.get("beautify", {}).get("enabled", False):
+            beautify_class = _load_optional_class("voice_beautify", "VoiceBeautifier")
+            if beautify_class is not None:
+                try:
+                    self.beautifier = beautify_class(self.config, self.sample_rate)
+                    logger.info("Voice Beautify enabled")
+                except Exception as e:
+                    logger.warning(
+                        f"Voice Beautify unavailable, continuing without it: {e}"
+                    )
+                    self.beautifier = None
+
         # Diarization (optional)
         if self.config["diarization"]["enabled"]:
             dia_config = self.config["diarization"]
@@ -936,6 +952,19 @@ class LectraAIPipeline:
             f"(target {TARGET_RMS_DBFS:.0f}), peak {20*np.log10(peak+1e-10):.1f} dBFS"
         )
 
+        # STEP 5.5: Voice Beautify (post-cleaning master on speech segments only)
+        out_sr = sr
+        if self.beautifier is not None:
+            logger.info("\nSTEP 5.5: Voice Beautify (tone / leveler / air)")
+            try:
+                final_audio, out_sr = self.beautifier.process(
+                    final_audio, speech_segments
+                )
+                final_audio = final_audio.astype(np.float32)
+            except Exception as e:
+                logger.warning(f"Voice Beautify failed, using un-beautified audio: {e}")
+                out_sr = sr
+
         # STEP 6: Save cleaned audio
         logger.info("\nSTEP 6: Saving cleaned audio")
         output_format = self.config["output"]["format"]
@@ -943,7 +972,7 @@ class LectraAIPipeline:
         audio_output_path = output_dir / f"{input_name}_cleaned.{output_format}"
         self.media_loader.save_audio(
             final_audio,
-            sr,
+            out_sr,
             str(audio_output_path),
             format=output_format,
             bit_depth=bit_depth,
@@ -1088,7 +1117,7 @@ class LectraAIPipeline:
             "transcript": transcript,
             "diarization": diarization_results,
             "duration_original": len(audio) / sr,
-            "duration_processed": len(final_audio) / sr,
+            "duration_processed": len(final_audio) / out_sr,
             "speech_segments": len(speech_segments),
             "processing_time": elapsed_time,
             "from_cache": False,
