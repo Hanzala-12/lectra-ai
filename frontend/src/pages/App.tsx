@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, Settings, FileAudio, Play, Download, CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Link } from 'react-router-dom';
+import { Sparkles } from 'lucide-react';
 
 type ProcessState = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
@@ -23,6 +25,8 @@ type ProcessResult = {
   speech_segments?: number;
   diarization?: Array<{ start: number; end: number; speaker?: string }>;
   speaker_audio?: Record<string, string>;
+  lecture_id?: string;
+  title?: string;
   error?: string;
 };
 
@@ -121,7 +125,7 @@ export function App() {
 
       setState('processing');
 
-      const response = await fetch(buildUrl('/api/process'), {
+      const response = await fetch(buildUrl('/api/process-lecture'), {
         method: 'POST',
         body: formData,
       });
@@ -341,7 +345,19 @@ export function App() {
             <div className="bg-success-light/50 border-b border-success/20 p-4 flex items-center justify-center gap-2 text-success text-sm font-medium">
               <CheckCircle2 className="w-5 h-5" /> Processing complete! Results are ready.
             </div>
-            
+
+            {result?.lecture_id && (
+              <div className="bg-primary/5 border-b border-primary/20 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <p className="text-sm text-text">
+                  Your lecture is saved. Generate <span className="font-medium">notes, quizzes, a study schedule</span> or <span className="font-medium">chat</span> with it.
+                </p>
+                <Link to={`/app/lecture/${result.lecture_id}`}
+                  className="shrink-0 inline-flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2 rounded-lg font-semibold shadow-sm">
+                  <Sparkles className="w-4 h-4" /> Open Study Tools
+                </Link>
+              </div>
+            )}
+
             <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
               {/* Left: Audio Players */}
               <div className="p-8">

@@ -20,6 +20,7 @@ import { Library } from './pages/Library';
 import { Quiz } from './pages/Quiz';
 import { Analytics } from './pages/Analytics';
 import { Chat } from './pages/Chat';
+import { Lecture } from './pages/Lecture';
 import { NotFound } from './pages/NotFound';
 
 function AnimatedRoutes() {
@@ -62,6 +63,7 @@ function AnimatedRoutes() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="upload" element={<DemoApp />} />
           <Route path="library" element={<Library />} />
+          <Route path="lecture/:id" element={<Lecture />} />
           <Route path="quiz" element={<Quiz />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="chat" element={<Chat />} />
