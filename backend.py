@@ -88,6 +88,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Study/LLM features (notes, quiz, schedule, evaluation, RAG chat).
+# Self-contained router; degrades gracefully if the LLM key isn't set.
+try:
+    from study_api import router as study_router
+
+    app.include_router(study_router)
+    logger.info("Study/LLM API routes enabled")
+except Exception as e:
+    logger.warning(f"Study/LLM API routes unavailable: {e}")
+
 
 # Configuration
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "500"))
@@ -482,6 +492,51 @@ async def process_audio(
         return JSONResponse(
             status_code=500, content={"success": False, "error": str(e)}
         )
+
+
+@app.post("/api/process-lecture")
+async def process_lecture(
+    file: UploadFile = File(...),
+    whisper_model: str = "base",
+    enable_diarization: bool = True,
+    title: Optional[str] = None,
+):
+    """Full lecture pipeline: clean + transcribe (reuses /api/process), then store
+    the result in the lecture repository so notes / quiz / schedule / evaluation /
+    chat can be generated from it. Returns everything /api/process returns plus a
+    `lecture_id`."""
+    result = await process_audio(
+        file=file,
+        whisper_model=whisper_model,
+        enable_diarization=enable_diarization,
+        transcript_format="txt",
+    )
+    # processing error → pass the error response straight through
+    if isinstance(result, JSONResponse):
+        return result
+
+    try:
+        from lecture_repository import get_repository
+
+        rec = get_repository().create(
+            title=title or Path(file.filename).stem,
+            transcript_text=result.get("transcript", ""),
+            transcript_segments=result.get("transcript_segments", []),
+            diarization=result.get("diarization", []),
+            metadata={
+                "duration_processed": result.get("duration_processed"),
+                "duration_original": result.get("duration_original"),
+                "audio_url": result.get("audio_url"),
+                "original_audio_url": result.get("original_audio_url"),
+                "is_video": result.get("is_video"),
+            },
+        )
+        result["lecture_id"] = rec["id"]
+        result["title"] = rec["title"]
+    except Exception as e:
+        logger.warning(f"Could not store lecture in repository: {e}")
+
+    return result
 
 
 @app.get("/api/download/{filename}")

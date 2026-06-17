@@ -18,6 +18,7 @@ This project combines state-of-the-art deep learning models with custom algorith
 - **CPU-friendly**: the full denoise chain runs faster-than-realtime on CPU (no GPU required)
 - **Custom DSP Algorithms**: hand-written signal processing (adaptive thresholds, gain-riding, clarity EQ, loudness normalization) plus optional experimental modules
 - **Voice Beautify (optional)**: post-cleaning master applied to speech only — adaptive tone, loudness leveling, and high-band "air" — SNR-guarded so it never adds noise back. Off by default; see [`beautify`](config.yaml) in config.
+- **Study Assistant (NLP/LLM + RAG)**: turns a transcript into **study notes, quizzes, a personalized schedule, an evaluation/analysis**, and a **RAG-grounded chatbot**, stored in a lecture repository. Provider-agnostic (OpenRouter by default). See **[Study Assistant docs](docs/STUDY_ASSISTANT.md)**.
 - **Web Interface**: React frontend + FastAPI backend
 - **Docker Support**: One-command deployment
 
@@ -256,17 +257,22 @@ For detailed documentation, see [docs/CUSTOM_DSP.md](docs/CUSTOM_DSP.md).
 
 ## Roadmap
 
-The following features are planned or in progress for future releases:
+Study-assistant features — **backend implemented** ([docs](docs/STUDY_ASSISTANT.md)); frontend wiring in progress:
 
-- **Quiz Generation** - Automatically generate quizzes from lecture transcripts. *(In progress: static frontend page exists, backend generation not yet implemented)*
-- **AI-Powered Study Notes** - Summarize lectures into key points and study notes. *(Planned: no dedicated backend exists yet)*
-- **RAG Chatbot** - Ask questions about lecture content and get answers from the transcript. *(In progress: placeholder chat UI exists, backend retrieval/generation pending)*
+- **Quiz Generation** - Generate & auto-grade MCQ quizzes from transcripts. *(✅ backend: `POST /api/lecture/{id}/quiz`; UI wiring pending)*
+- **AI-Powered Study Notes** - Markdown summary, key points & definitions. *(✅ backend: `POST /api/lecture/{id}/notes`; UI wiring pending)*
+- **RAG Chatbot** - Ask questions answered from the lecture transcript. *(✅ backend: `POST /api/lecture/{id}/chat`; UI wiring pending)*
+- **Personalized Schedule & Evaluation** - Spaced-repetition study plan + lecture analysis. *(✅ backend: `/schedule`, `/evaluate`)*
+
+Next: point the React pages (Library / Quiz / Chat / Dashboard / Analytics) at these endpoints, and an optional 48 kHz audio path.
 
 ---
 
 ## Documentation
 
 - **[Noise Removal & Diarization Pipeline](docs/NOISE_REMOVAL_AND_DIARIZATION.md)**: Full end-to-end signal chain, how each stage works, and the measured engineering decisions behind the clean result ⭐
+- **[Pipeline Explained (plain language)](docs/PIPELINE_EXPLAINED.md)**: point-by-point walkthrough for explaining the noise-removal process to others
+- **[Study Assistant (NLP/LLM + RAG)](docs/STUDY_ASSISTANT.md)**: notes, quiz, schedule, evaluation & chatbot — API reference and how to enable the LLM ⭐
 - **[Architecture](docs/ARCHITECTURE.md)**: System design and component overview
 - **[Custom DSP Modules](docs/CUSTOM_DSP.md)**: API reference and usage guide for experimental modules
 - **[Performance Optimization](docs/OPTIMIZATION.md)**: CPU optimization techniques and benchmarks

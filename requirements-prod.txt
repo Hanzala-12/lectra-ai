@@ -50,6 +50,9 @@ async-timeout==4.0.3
 # Speech Recognition
 faster-whisper==1.0.3
 
+# Study assistant — NLP/LLM + RAG (notes, quiz, schedule, evaluation, chat)
+scikit-learn==1.5.2
+
 # Video Processing
 moviepy==1.0.3
 ffmpeg-python==0.2.0
