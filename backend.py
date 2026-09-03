@@ -2,7 +2,7 @@
 FastAPI Backend Server for Lectra AI
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, field_validator
@@ -153,8 +153,17 @@ def initialize_pipeline(config: ProcessingConfig):
     # Skip ASR initialisation entirely when asr.skip is true
     asr_skip = pipeline.config.get("asr", {}).get("skip", False)
     if not asr_skip:
+        # ASRProcessor internally maps the "turbo" alias to "large-v3-turbo" and
+        # stores THAT as .model_size — compare against the same normalized form,
+        # otherwise this always mismatches and reloads the model from disk on
+        # every single request (~20-30s wasted) even when nothing changed.
+        requested_model = (
+            "large-v3-turbo"
+            if config.whisper_model == "turbo"
+            else config.whisper_model
+        )
         current_model = pipeline.asr.model_size if pipeline.asr is not None else None
-        if current_model != config.whisper_model:
+        if current_model != requested_model:
             logger.info(
                 f"Loading faster-whisper '{config.whisper_model}' (was '{current_model}')"
             )
@@ -226,18 +235,42 @@ async def get_model_status():
     """Check download status of all required models"""
     models_dir = Path("./models")
 
-    # faster-whisper models are stored in CTranslate2 format
-    # Check for turbo model directory (faster-whisper format)
+    def snapshot_model_dir(*cache_names: str) -> Optional[Path]:
+        for cache_name in cache_names:
+            cache_root = models_dir / cache_name / "snapshots"
+            if not cache_root.exists():
+                continue
+            for candidate in cache_root.iterdir():
+                if (candidate / "config.json").exists():
+                    return candidate
+        return None
+
+    # faster-whisper stores named models either directly or in Hugging Face cache
+    # snapshot folders, depending on the model source.
     turbo_path = models_dir / "large-v3-turbo"
-    whisper_ready = turbo_path.exists() and (turbo_path / "config.json").exists()
+    turbo_snapshot = snapshot_model_dir(
+        "models--mobiuslabsgmbh--faster-whisper-large-v3-turbo",
+        "models--Systran--faster-whisper-large-v3-turbo",
+    )
+    runtime_whisper_ready = bool(
+        pipeline is not None and getattr(getattr(pipeline, "asr", None), "model", None)
+    )
+    whisper_path = (
+        turbo_path if (turbo_path / "config.json").exists() else turbo_snapshot
+    )
+    whisper_ready = runtime_whisper_ready or whisper_path is not None
 
     # Estimate size if available
-    if whisper_ready:
+    if whisper_path is not None:
         whisper_size = sum(
-            f.stat().st_size for f in turbo_path.rglob("*") if f.is_file()
+            f.stat().st_size for f in whisper_path.rglob("*") if f.is_file()
         )
         WHISPER_EXPECTED = 850_000_000  # ~850 MB for turbo model
         whisper_pct = min(100, round(whisper_size / WHISPER_EXPECTED * 100, 1))
+    elif runtime_whisper_ready:
+        whisper_size = 0
+        whisper_pct = 100
+        WHISPER_EXPECTED = 850_000_000
     else:
         whisper_size = 0
         whisper_pct = 0
@@ -252,7 +285,12 @@ async def get_model_status():
     except Exception:
         deepfilter_ready = False
 
-    # Pyannote diarization model
+    # Pyannote diarization model. Folder-size is only an estimate — the
+    # segmentation-3.0 / wespeaker sub-models Pyannote actually needs land in
+    # the global HuggingFace cache (~/.cache/torch/pyannote, OS/user-specific),
+    # not under models_dir, so size alone under-reports. Trust the live pipeline
+    # object first (same pattern as whisper_ready above); fall back to the size
+    # heuristic only when the pipeline hasn't loaded yet.
     pyannote_dir = models_dir / "pyannote"
     PYANNOTE_EXPECTED = 300_000_000  # ~300 MB minimum
     pyannote_size = (
@@ -260,7 +298,12 @@ async def get_model_status():
         if pyannote_dir.exists()
         else 0
     )
-    pyannote_ready = pyannote_size >= PYANNOTE_EXPECTED
+    runtime_pyannote_ready = bool(
+        pipeline is not None
+        and getattr(getattr(pipeline, "diarization", None), "pipeline", None)
+        is not None
+    )
+    pyannote_ready = runtime_pyannote_ready or pyannote_size >= PYANNOTE_EXPECTED
 
     def fmt_mb(b):
         return f"{round(b / 1024 / 1024, 1)} MB"
@@ -287,12 +330,17 @@ async def get_model_status():
                 "name": "Pyannote Diarization 3.1",
                 "description": "Speaker detection (~700 MB)",
                 "ready": pyannote_ready,
-                "progress": min(100, round(pyannote_size / PYANNOTE_EXPECTED * 100, 1)),
+                "progress": (
+                    100
+                    if runtime_pyannote_ready
+                    else min(100, round(pyannote_size / PYANNOTE_EXPECTED * 100, 1))
+                ),
                 "downloaded": fmt_mb(pyannote_size),
                 "total": "~700 MB",
             },
         },
-        "all_ready": whisper_ready and deepfilter_ready,
+        "core_ready": whisper_ready and deepfilter_ready,
+        "all_ready": whisper_ready and deepfilter_ready and pyannote_ready,
     }
 
 
@@ -338,9 +386,9 @@ async def log_requests(request: Request, call_next):
 @app.post("/api/process")
 async def process_audio(
     file: UploadFile = File(...),
-    whisper_model: str = "base",
-    enable_diarization: bool = True,
-    transcript_format: str = "txt",
+    whisper_model: str = Form("base"),
+    enable_diarization: bool = Form(True),
+    transcript_format: str = Form("txt"),
 ):
     """Process uploaded audio/video file"""
 
@@ -497,9 +545,9 @@ async def process_audio(
 @app.post("/api/process-lecture")
 async def process_lecture(
     file: UploadFile = File(...),
-    whisper_model: str = "base",
-    enable_diarization: bool = True,
-    title: Optional[str] = None,
+    whisper_model: str = Form("base"),
+    enable_diarization: bool = Form(True),
+    title: Optional[str] = Form(None),
 ):
     """Full lecture pipeline: clean + transcribe (reuses /api/process), then store
     the result in the lecture repository so notes / quiz / schedule / evaluation /
