@@ -12,6 +12,7 @@ returns HTTP 503 with a clear message instead of crashing.
 """
 
 import logging
+import time
 from typing import List, Optional, Any
 
 from fastapi import APIRouter, HTTPException
@@ -153,7 +154,23 @@ async def grade(lecture_id: str, body: GradeRequest):
         raise HTTPException(
             status_code=400, detail="No quiz generated for this lecture yet"
         )
-    return study_tools.grade_quiz(rec["quiz"], body.answers)
+    result = study_tools.grade_quiz(rec["quiz"], body.answers)
+
+    # Persist the attempt — previously this computed a score and returned it
+    # without ever saving it, so no quiz history/progress data existed anywhere.
+    attempts = list(rec.get("quiz_attempts") or [])
+    attempts.append(
+        {
+            "graded_at": time.time(),
+            "answers": body.answers,
+            "score": result["score"],
+            "correct": result["correct"],
+            "total": result["total"],
+        }
+    )
+    get_repository().update(lecture_id, quiz_attempts=attempts[-20:])
+
+    return result
 
 
 @router.post("/lecture/{lecture_id}/schedule")

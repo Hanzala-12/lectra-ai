@@ -51,6 +51,7 @@ class LectureRepository:
             "schedule": None,
             "evaluation": None,
             "chat_history": [],
+            "quiz_attempts": [],  # grading history — see study_api.py::grade()
         }
         self._write(record)
         return record
@@ -97,6 +98,16 @@ class LectureRepository:
                         "has_schedule": r.get("schedule") is not None,
                         "has_evaluation": r.get("evaluation") is not None,
                         "word_count": len((r.get("transcript_text") or "").split()),
+                        "quiz_attempts": len(r.get("quiz_attempts") or []),
+                        "best_score": (
+                            max(
+                                (
+                                    a.get("score", 0)
+                                    for a in r.get("quiz_attempts") or []
+                                ),
+                                default=None,
+                            )
+                        ),
                     }
                 )
             except Exception:
