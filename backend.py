@@ -2,7 +2,7 @@
 FastAPI Backend Server for Lectra AI
 """
 
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Request
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, field_validator
@@ -13,6 +13,7 @@ import os
 import sys
 import tempfile
 import shutil
+import uuid
 from pathlib import Path
 import logging
 import time
@@ -54,10 +55,36 @@ logger = logging.getLogger(__name__)
 pipeline = None
 
 
+def _seed_demo_student():
+    """Create one demo student on first run, from .env, if none exist yet.
+    Never logs or stores the password in plaintext — see auth_utils.hash_password.
+    A no-op after the first run (student_repository already has someone)."""
+    try:
+        from student_repository import get_repository as get_student_repo
+
+        repo = get_student_repo()
+        if repo.list_raw():
+            return  # already have at least one student — don't touch anything
+        username = os.getenv("SEED_STUDENT_USERNAME")
+        password = os.getenv("SEED_STUDENT_PASSWORD")
+        if not username or not password:
+            logger.info(
+                "No students exist and SEED_STUDENT_USERNAME/PASSWORD not set in "
+                ".env — skipping demo account seed. Sign up from the frontend instead."
+            )
+            return
+        repo.create(username, password)
+        logger.info(f"Seeded demo student account '{username}' from .env")
+    except Exception as e:
+        logger.warning(f"Student seed skipped: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown events"""
     # Startup
+    _seed_demo_student()
+
     logger.info("Server startup: pre-warming pipeline (loading models into memory)...")
     try:
         config = ProcessingConfig()
@@ -87,6 +114,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Auth (signup/login/logout/me) — mounted before study_api since study_api's
+# routes depend on auth_api.get_current_student.
+from auth_api import router as auth_router, get_current_student
+
+app.include_router(auth_router)
+logger.info("Auth API routes enabled")
 
 # Study/LLM features (notes, quiz, schedule, evaluation, RAG chat).
 # Self-contained router; degrades gracefully if the LLM key isn't set.
@@ -389,8 +423,11 @@ async def process_audio(
     whisper_model: str = Form("base"),
     enable_diarization: bool = Form(True),
     transcript_format: str = Form("txt"),
+    student_id: str = Depends(get_current_student),
 ):
-    """Process uploaded audio/video file"""
+    """Process uploaded audio/video file. Requires login (gates who can spend
+    compute on this endpoint); student_id isn't used here directly since this
+    endpoint doesn't persist anything — /api/process-lecture below does."""
 
     start_time = time.time()
 
@@ -548,16 +585,21 @@ async def process_lecture(
     whisper_model: str = Form("base"),
     enable_diarization: bool = Form(True),
     title: Optional[str] = Form(None),
+    student_id: str = Depends(get_current_student),
 ):
     """Full lecture pipeline: clean + transcribe (reuses /api/process), then store
     the result in the lecture repository so notes / quiz / schedule / evaluation /
     chat can be generated from it. Returns everything /api/process returns plus a
-    `lecture_id`."""
+    `lecture_id`. The created lecture is owned by the logged-in student, and a
+    LectureSession record is created alongside it (the student's "attendance" of
+    this lecture — see lecture_session_repository.py)."""
+    session_start = time.time()
     result = await process_audio(
         file=file,
         whisper_model=whisper_model,
         enable_diarization=enable_diarization,
         transcript_format="txt",
+        student_id=student_id,  # Depends() doesn't auto-resolve on a direct call like this
     )
     # processing error → pass the error response straight through
     if isinstance(result, JSONResponse):
@@ -565,6 +607,38 @@ async def process_lecture(
 
     try:
         from lecture_repository import get_repository
+
+        # AudioFile as a real (if lecture-embedded) entity: one row per actual
+        # file produced by the pipeline, each with its own id/kind/duration,
+        # instead of loose ad-hoc metadata fields.
+        audio_files = []
+        if result.get("original_audio_url"):
+            audio_files.append(
+                {
+                    "audio_id": uuid.uuid4().hex[:10],
+                    "kind": "original",
+                    "file_path": result["original_audio_url"],
+                    "duration": result.get("duration_original"),
+                }
+            )
+        if result.get("audio_url"):
+            audio_files.append(
+                {
+                    "audio_id": uuid.uuid4().hex[:10],
+                    "kind": "cleaned",
+                    "file_path": result["audio_url"],
+                    "duration": result.get("duration_processed"),
+                }
+            )
+        for speaker, url in (result.get("speaker_audio") or {}).items():
+            audio_files.append(
+                {
+                    "audio_id": uuid.uuid4().hex[:10],
+                    "kind": f"speaker:{speaker}",
+                    "file_path": url,
+                    "duration": None,
+                }
+            )
 
         rec = get_repository().create(
             title=title or Path(file.filename).stem,
@@ -578,9 +652,23 @@ async def process_lecture(
                 "original_audio_url": result.get("original_audio_url"),
                 "is_video": result.get("is_video"),
             },
+            student_id=student_id,
+            audio_files=audio_files,
         )
         result["lecture_id"] = rec["id"]
         result["title"] = rec["title"]
+        result["audio_files"] = audio_files
+
+        # LectureSession — the student's "attendance" of this lecture.
+        from lecture_session_repository import get_repository as get_session_repo
+
+        session = get_session_repo().create(
+            student_id=student_id,
+            lecture_id=rec["id"],
+            start_time=session_start,
+            duration_seconds=result.get("duration_processed"),
+        )
+        result["session_id"] = session["id"]
     except Exception as e:
         logger.warning(f"Could not store lecture in repository: {e}")
 
