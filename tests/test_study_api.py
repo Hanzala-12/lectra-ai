@@ -63,6 +63,29 @@ def test_create_and_get_lecture(auth):
     assert r2.json()["quiz_attempts"] == []
 
 
+def test_lecture_audio_files_defaults_empty(auth):
+    """AudioFile is a real top-level entity now (audio_file_repository.py), no
+    longer embedded on the Lecture record — a lecture with none yet still gets
+    a predictable empty list back rather than a missing key."""
+    lec = _lecture(auth)
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert rec["audio_files"] == []
+
+
+def test_lecture_merges_latest_audio_files(auth):
+    import audio_file_repository
+
+    lec = _lecture(auth)
+    files = [
+        {"audio_id": "a1", "kind": "cleaned", "file_path": "/x.wav", "duration": 12.0}
+    ]
+    audio_file_repository.get_repository().create(
+        lecture_id=lec["id"], session_id="sess1", files=files
+    )
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert rec["audio_files"] == files
+
+
 def test_get_missing_lecture_404(auth):
     r = client.get("/api/lecture/does-not-exist", headers=auth.headers)
     assert r.status_code == 404
@@ -164,6 +187,37 @@ def test_generate_quiz(auth):
     assert all(a["answer_id"] for a in answers)
 
 
+def test_quiz_id_stable_until_refresh(auth):
+    """Quiz is a real, versioned top-level entity now (quiz_repository.py) — the
+    same quiz_id comes back from a cached (non-refresh) call, and a NEW quiz_id
+    is minted only when explicitly refreshed."""
+    lec = _lecture(auth)
+    first = client.post(
+        f"/api/lecture/{lec['id']}/quiz",
+        json={"num_questions": 1},
+        headers=auth.headers,
+    ).json()
+    again = client.post(
+        f"/api/lecture/{lec['id']}/quiz",
+        json={"num_questions": 1},
+        headers=auth.headers,
+    ).json()
+    assert first["quiz_id"] == again["quiz_id"]
+    assert again["cached"] is True
+
+    refreshed = client.post(
+        f"/api/lecture/{lec['id']}/quiz?refresh=true",
+        json={"num_questions": 1},
+        headers=auth.headers,
+    ).json()
+    assert refreshed["quiz_id"] != first["quiz_id"]
+    assert refreshed["cached"] is False
+
+    # GET lecture merges in the latest (refreshed) quiz version
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert rec["quiz_id"] == refreshed["quiz_id"]
+
+
 def test_grade_quiz_without_quiz_400(auth):
     lec = _lecture(auth)
     r = client.post(
@@ -196,18 +250,74 @@ def test_grade_quiz_persists_attempt(auth):
     assert body["total"] == 1
     assert body["breakdown"][0]["your_answer_id"] == correct_id
     assert body["breakdown"][0]["correct_answer_id"] == correct_id
+    # QuizResult now has its own dedicated result_id (previously only
+    # score/answers/timestamp were kept).
+    assert body["result_id"]
 
     rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
     assert len(rec["quiz_attempts"]) == 1
-    assert rec["quiz_attempts"][0]["score"] == 100.0
-    assert rec["quiz_attempts"][0]["answers"] == [correct_id]
-    assert rec["quiz_attempts"][0]["student_id"] == auth.student_id
-    assert "graded_at" in rec["quiz_attempts"][0]
+    attempt = rec["quiz_attempts"][0]
+    assert attempt["score"] == 100.0
+    assert attempt["answers"] == [correct_id]
+    assert attempt["student_id"] == auth.student_id
+    assert "graded_at" in attempt
+    assert attempt["result_id"] == body["result_id"]
+    assert attempt["quiz_id"] == rec["quiz_id"]
+    # per-question feedback (the "why") is now persisted, not just computed
+    # and thrown away on every request.
+    assert attempt["feedback"] == body["breakdown"]
+    assert attempt["feedback"][0]["correct_answer_id"] == correct_id
 
     lib = client.get("/api/library", headers=auth.headers).json()["lectures"]
     entry = next(l for l in lib if l["id"] == lec["id"])
     assert entry["quiz_attempts"] == 1
     assert entry["best_score"] == 100.0
+
+
+def test_grade_against_specific_older_quiz_version(auth):
+    """Grading always defaults to the latest quiz, but an explicit quiz_id lets a
+    student grade against the exact version they actually attempted, even after
+    a newer one has been generated."""
+    lec = _lecture(auth)
+    v1 = client.post(
+        f"/api/lecture/{lec['id']}/quiz",
+        json={"num_questions": 1},
+        headers=auth.headers,
+    ).json()
+    v1_correct, _ = _correct_and_wrong_answer_ids(v1["quiz"][0])
+
+    v2 = client.post(
+        f"/api/lecture/{lec['id']}/quiz?refresh=true",
+        json={"num_questions": 1},
+        headers=auth.headers,
+    ).json()
+    assert v2["quiz_id"] != v1["quiz_id"]
+
+    r = client.post(
+        f"/api/lecture/{lec['id']}/quiz/grade",
+        json={"answers": [v1_correct], "quiz_id": v1["quiz_id"]},
+        headers=auth.headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["score"] == 100.0
+
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert rec["quiz_attempts"][-1]["quiz_id"] == v1["quiz_id"]
+
+
+def test_grade_against_unknown_quiz_id_404(auth):
+    lec = _lecture(auth)
+    client.post(
+        f"/api/lecture/{lec['id']}/quiz",
+        json={"num_questions": 1},
+        headers=auth.headers,
+    )
+    r = client.post(
+        f"/api/lecture/{lec['id']}/quiz/grade",
+        json={"answers": ["x"], "quiz_id": "does-not-exist"},
+        headers=auth.headers,
+    )
+    assert r.status_code == 404
 
 
 def test_grade_quiz_wrong_answer_scores_zero(auth):
@@ -278,6 +388,45 @@ def test_generate_schedule(auth):
     )
     assert r.status_code == 200
     assert r.json()["schedule"]["plan"][0]["day"] == 1
+
+
+def test_generate_schedule_stores_available_time_and_goals(auth):
+    """StudyPlan.available_time / StudyPlan.learning_goals — real inputs, persisted
+    on the normalized top-level StudyPlan record (study_plan_repository.py)."""
+    lec = _lecture(auth)
+    r = client.post(
+        f"/api/lecture/{lec['id']}/schedule",
+        json={
+            "days": 3,
+            "available_time": "1 hour/day",
+            "learning_goals": "ace the exam",
+        },
+        headers=auth.headers,
+    )
+    assert r.status_code == 200
+    schedule = r.json()["schedule"]
+    assert schedule["available_time"] == "1 hour/day"
+    assert schedule["learning_goals"] == "ace the exam"
+    assert schedule["id"]
+
+
+def test_regenerate_schedule_creates_new_plan_version(auth):
+    """StudyPlan is a real, versioned top-level entity now — refreshing creates a
+    new record instead of overwriting the previous one."""
+    lec = _lecture(auth)
+    first = client.post(
+        f"/api/lecture/{lec['id']}/schedule", json={"days": 3}, headers=auth.headers
+    ).json()["schedule"]
+    second = client.post(
+        f"/api/lecture/{lec['id']}/schedule?refresh=true",
+        json={"days": 5},
+        headers=auth.headers,
+    ).json()["schedule"]
+    assert first["id"] != second["id"]
+
+    # GET lecture merges in the latest (second) plan
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert rec["schedule"]["id"] == second["id"]
 
 
 def test_generate_evaluation(auth):

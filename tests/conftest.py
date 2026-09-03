@@ -1,9 +1,10 @@
 """
 Shared pytest fixtures for the FastAPI test suite.
 
-- isolated_repos (autouse): points the lecture/student/session file-backed
-  repositories at fresh temp directories for every test, so nothing here
-  ever touches real data/lectures, data/students, or data/sessions.json.
+- isolated_repos (autouse): points every file-backed repository (lecture,
+  student, session, lecture-session, quiz, study-plan, audio-file) at fresh
+  temp directories for every test, so nothing here ever touches real
+  data/lectures, data/students, data/sessions.json, etc.
 - fake_llm (autouse): replaces study_api's LLM client with a deterministic
   stand-in — no network/credits needed to test routing/validation/persistence.
 - auth: signs up a fresh throwaway student via the real signup endpoint and
@@ -24,6 +25,10 @@ from backend import app
 import lecture_repository
 import student_repository
 import session_store
+import lecture_session_repository
+import quiz_repository
+import study_plan_repository
+import audio_file_repository
 import study_api
 
 client = TestClient(app)
@@ -45,6 +50,32 @@ def isolated_repos(tmp_path, monkeypatch):
         session_store,
         "_default_store",
         session_store.SessionStore(path=str(tmp_path / "sessions.json")),
+    )
+    monkeypatch.setattr(
+        lecture_session_repository,
+        "_default_repo",
+        lecture_session_repository.LectureSessionRepository(
+            data_dir=str(tmp_path / "lecture_sessions")
+        ),
+    )
+    monkeypatch.setattr(
+        quiz_repository,
+        "_default_repo",
+        quiz_repository.QuizRepository(data_dir=str(tmp_path / "quizzes")),
+    )
+    monkeypatch.setattr(
+        study_plan_repository,
+        "_default_repo",
+        study_plan_repository.StudyPlanRepository(
+            data_dir=str(tmp_path / "study_plans")
+        ),
+    )
+    monkeypatch.setattr(
+        audio_file_repository,
+        "_default_repo",
+        audio_file_repository.AudioFileRepository(
+            data_dir=str(tmp_path / "audio_files")
+        ),
     )
     yield
 

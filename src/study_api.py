@@ -14,10 +14,18 @@ All /lecture* routes require a logged-in student (see auth_api.py) and are
 scoped to that student's own lectures — a lecture belonging to another student
 (or a legacy record created before auth existed) 404s exactly like a
 nonexistent one, rather than leaking whether it exists.
+
+Quiz and StudyPlan are real, independently-addressable, versioned top-level
+entities (quiz_repository.py / study_plan_repository.py) — regenerating either
+creates a new record instead of overwriting the previous one. get_lecture()
+and library() merge the latest of each back into the response so the API
+shape callers already rely on (lecture.quiz / lecture.schedule) is unchanged;
+storage underneath is what changed.
 """
 
 import logging
 import time
+import uuid
 from typing import List, Optional, Any
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -27,6 +35,9 @@ from llm_client import get_llm, LLMNotConfigured
 from lecture_repository import get_repository
 from rag_engine import RagEngine, build_context
 from auth_api import get_current_student
+import quiz_repository
+import study_plan_repository
+import audio_file_repository
 import study_tools
 
 logger = logging.getLogger(__name__)
@@ -52,6 +63,9 @@ class ScheduleRequest(BaseModel):
 
 class GradeRequest(BaseModel):
     answers: List[Optional[str]]  # submitted answer_id per question, by position
+    quiz_id: Optional[str] = (
+        None  # which quiz version to grade against; defaults to latest
+    )
 
 
 class ChatRequest(BaseModel):
@@ -91,6 +105,36 @@ def _run_llm(fn, *args, **kwargs):
         raise HTTPException(status_code=502, detail=f"LLM generation failed: {e}")
 
 
+def _enrich_lecture(rec: dict) -> dict:
+    """Merge the latest normalized Quiz/StudyPlan/AudioFile records into a
+    lecture dict for API responses, falling back to whatever's embedded on
+    the lecture record itself (legacy records created before this
+    normalization). Never mutates the stored record."""
+    rec = dict(rec)
+    lecture_id = rec["id"]
+
+    latest_quiz = quiz_repository.get_repository().get_latest_for_lecture(lecture_id)
+    if latest_quiz:
+        rec["quiz"] = latest_quiz["questions"]
+        rec["quiz_id"] = latest_quiz["id"]
+    else:
+        rec.setdefault("quiz_id", None)
+
+    latest_plan = study_plan_repository.get_repository().get_latest_for_lecture(
+        lecture_id
+    )
+    if latest_plan:
+        rec["schedule"] = latest_plan
+
+    audio_rec = audio_file_repository.get_repository().get_for_lecture(lecture_id)
+    if audio_rec:
+        rec["audio_files"] = audio_rec["files"]
+    else:
+        rec.setdefault("audio_files", [])
+
+    return rec
+
+
 # ----------------------------------------------------------------- status
 @router.get("/llm-status")
 async def llm_status():
@@ -105,7 +149,17 @@ async def llm_status():
 # ----------------------------------------------------------------- library / CRUD
 @router.get("/library")
 async def library(student_id: str = Depends(get_current_student)):
-    return {"lectures": get_repository().list(student_id=student_id)}
+    lectures = get_repository().list(student_id=student_id)
+    for entry in lectures:
+        has_quiz = quiz_repository.get_repository().get_latest_for_lecture(entry["id"])
+        has_plan = study_plan_repository.get_repository().get_latest_for_lecture(
+            entry["id"]
+        )
+        # `or` keeps legacy records (created before this normalization, whose
+        # has_quiz/has_schedule already came from the embedded field) working.
+        entry["has_quiz"] = bool(has_quiz) or entry.get("has_quiz", False)
+        entry["has_schedule"] = bool(has_plan) or entry.get("has_schedule", False)
+    return {"lectures": lectures}
 
 
 @router.post("/lecture")
@@ -124,7 +178,7 @@ async def create_lecture(
 
 @router.get("/lecture/{lecture_id}")
 async def get_lecture(lecture_id: str, student_id: str = Depends(get_current_student)):
-    return _lecture_or_404(lecture_id, student_id)
+    return _enrich_lecture(_lecture_or_404(lecture_id, student_id))
 
 
 @router.delete("/lecture/{lecture_id}")
@@ -162,14 +216,21 @@ async def make_quiz(
     student_id: str = Depends(get_current_student),
 ):
     rec = _lecture_or_404(lecture_id, student_id)
-    if rec.get("quiz") and not refresh:
-        return {"quiz": rec["quiz"], "cached": True}
+    existing = quiz_repository.get_repository().get_latest_for_lecture(lecture_id)
+    if existing and not refresh:
+        return {
+            "quiz": existing["questions"],
+            "quiz_id": existing["id"],
+            "cached": True,
+        }
     llm = _require_llm()
-    quiz = _run_llm(
+    questions = _run_llm(
         study_tools.generate_quiz, rec["transcript_text"], llm, body.num_questions
     )
-    get_repository().update(lecture_id, quiz=quiz)
-    return {"quiz": quiz, "cached": False}
+    new_quiz = quiz_repository.get_repository().create(
+        lecture_id, student_id, questions
+    )
+    return {"quiz": new_quiz["questions"], "quiz_id": new_quiz["id"], "cached": False}
 
 
 @router.post("/lecture/{lecture_id}/quiz/grade")
@@ -179,29 +240,43 @@ async def grade(
     student_id: str = Depends(get_current_student),
 ):
     rec = _lecture_or_404(lecture_id, student_id)
-    if not rec.get("quiz"):
+
+    if body.quiz_id:
+        quiz_rec = quiz_repository.get_repository().get(body.quiz_id)
+        if quiz_rec is None or quiz_rec.get("lecture_id") != lecture_id:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+    else:
+        quiz_rec = quiz_repository.get_repository().get_latest_for_lecture(lecture_id)
+
+    if quiz_rec is None:
         raise HTTPException(
             status_code=400, detail="No quiz generated for this lecture yet"
         )
-    result = study_tools.grade_quiz(rec["quiz"], body.answers)
 
-    # Persist the attempt, tagged with who took it (QuizResult in the ERD is
-    # keyed by quiz+student — the lecture is already scoped to one student
-    # above, but storing student_id on the attempt itself keeps QuizResult
-    # meaningful on its own if lectures are ever shared across students later).
+    result = study_tools.grade_quiz(quiz_rec["questions"], body.answers)
+
+    # QuizResult: a real result_id, a reference to exactly which quiz version
+    # was attempted, and the per-question feedback persisted (previously only
+    # score/answers/timestamp were kept — the "why" was computed and thrown
+    # away on every request).
+    result_id = uuid.uuid4().hex[:12]
     attempts = list(rec.get("quiz_attempts") or [])
     attempts.append(
         {
+            "result_id": result_id,
+            "quiz_id": quiz_rec["id"],
             "student_id": student_id,
             "graded_at": time.time(),
             "answers": body.answers,
             "score": result["score"],
             "correct": result["correct"],
             "total": result["total"],
+            "feedback": result["breakdown"],
         }
     )
     get_repository().update(lecture_id, quiz_attempts=attempts[-20:])
 
+    result["result_id"] = result_id
     return result
 
 
@@ -213,8 +288,9 @@ async def make_schedule(
     student_id: str = Depends(get_current_student),
 ):
     rec = _lecture_or_404(lecture_id, student_id)
-    if rec.get("schedule") and not refresh:
-        return {"schedule": rec["schedule"], "cached": True}
+    existing = study_plan_repository.get_repository().get_latest_for_lecture(lecture_id)
+    if existing and not refresh:
+        return {"schedule": existing, "cached": True}
     llm = _require_llm()
     generated = _run_llm(
         study_tools.generate_schedule,
@@ -224,19 +300,15 @@ async def make_schedule(
         body.available_time,
         body.learning_goals,
     )
-    # StudyPlan: the LLM-generated plan/tips plus the real inputs and
-    # ownership fields the ERD's StudyPlan entity actually specifies
-    # (student_id, lecture_id, available_time, learning_goals).
-    schedule = {
-        **generated,
-        "student_id": student_id,
-        "lecture_id": lecture_id,
-        "available_time": body.available_time,
-        "learning_goals": body.learning_goals,
-        "created_at": time.time(),
-    }
-    get_repository().update(lecture_id, schedule=schedule)
-    return {"schedule": schedule, "cached": False}
+    new_plan = study_plan_repository.get_repository().create(
+        lecture_id=lecture_id,
+        student_id=student_id,
+        plan=generated.get("plan", []),
+        tips=generated.get("tips", []),
+        available_time=body.available_time,
+        learning_goals=body.learning_goals,
+    )
+    return {"schedule": new_plan, "cached": False}
 
 
 @router.post("/lecture/{lecture_id}/evaluate")

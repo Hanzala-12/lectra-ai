@@ -41,6 +41,9 @@ data/lectures/
 data/students/
 data/sessions.json
 data/lecture_sessions/
+data/quizzes/
+data/study_plans/
+data/audio_files/
 fyp audio/
 *.wav
 *.mp3

@@ -608,9 +608,40 @@ async def process_lecture(
     try:
         from lecture_repository import get_repository
 
-        # AudioFile as a real (if lecture-embedded) entity: one row per actual
-        # file produced by the pipeline, each with its own id/kind/duration,
-        # instead of loose ad-hoc metadata fields.
+        rec = get_repository().create(
+            title=title or Path(file.filename).stem,
+            transcript_text=result.get("transcript", ""),
+            transcript_segments=result.get("transcript_segments", []),
+            diarization=result.get("diarization", []),
+            metadata={
+                "duration_processed": result.get("duration_processed"),
+                "duration_original": result.get("duration_original"),
+                "audio_url": result.get("audio_url"),
+                "original_audio_url": result.get("original_audio_url"),
+                "is_video": result.get("is_video"),
+            },
+            student_id=student_id,
+        )
+        result["lecture_id"] = rec["id"]
+        result["title"] = rec["title"]
+
+        # LectureSession — the student's "attendance" of this lecture.
+        from lecture_session_repository import get_repository as get_session_repo
+
+        session = get_session_repo().create(
+            student_id=student_id,
+            lecture_id=rec["id"],
+            start_time=session_start,
+            duration_seconds=result.get("duration_processed"),
+        )
+        result["session_id"] = session["id"]
+
+        # AudioFile — a real top-level entity (audio_file_repository.py): one
+        # row per actual file produced by the pipeline, each with its own
+        # id/kind/duration, instead of loose ad-hoc metadata fields or an
+        # embedded list on the Lecture record.
+        from audio_file_repository import get_repository as get_audio_file_repo
+
         audio_files = []
         if result.get("original_audio_url"):
             audio_files.append(
@@ -639,36 +670,12 @@ async def process_lecture(
                     "duration": None,
                 }
             )
-
-        rec = get_repository().create(
-            title=title or Path(file.filename).stem,
-            transcript_text=result.get("transcript", ""),
-            transcript_segments=result.get("transcript_segments", []),
-            diarization=result.get("diarization", []),
-            metadata={
-                "duration_processed": result.get("duration_processed"),
-                "duration_original": result.get("duration_original"),
-                "audio_url": result.get("audio_url"),
-                "original_audio_url": result.get("original_audio_url"),
-                "is_video": result.get("is_video"),
-            },
-            student_id=student_id,
-            audio_files=audio_files,
-        )
-        result["lecture_id"] = rec["id"]
-        result["title"] = rec["title"]
-        result["audio_files"] = audio_files
-
-        # LectureSession — the student's "attendance" of this lecture.
-        from lecture_session_repository import get_repository as get_session_repo
-
-        session = get_session_repo().create(
-            student_id=student_id,
+        get_audio_file_repo().create(
             lecture_id=rec["id"],
-            start_time=session_start,
-            duration_seconds=result.get("duration_processed"),
+            session_id=session["id"],
+            files=audio_files,
         )
-        result["session_id"] = session["id"]
+        result["audio_files"] = audio_files
     except Exception as e:
         logger.warning(f"Could not store lecture in repository: {e}")
 

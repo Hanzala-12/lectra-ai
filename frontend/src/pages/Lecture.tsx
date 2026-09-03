@@ -93,7 +93,7 @@ export function Lecture() {
 
       {tab === 'transcript' && <TranscriptTab lecture={lecture} />}
       {tab === 'notes' && <NotesTab id={id} initial={lecture.notes} />}
-      {tab === 'quiz' && <QuizTab id={id} initial={lecture.quiz} />}
+      {tab === 'quiz' && <QuizTab id={id} initial={lecture.quiz} initialQuizId={lecture.quiz_id} />}
       {tab === 'schedule' && <ScheduleTab id={id} initial={lecture.schedule} />}
       {tab === 'evaluation' && <EvaluationTab id={id} initial={lecture.evaluation} />}
       {tab === 'chat' && <ChatTab id={id} history={lecture.chat_history} />}
@@ -168,8 +168,12 @@ function NotesTab({ id, initial }: { id: string; initial: string | null }) {
 }
 
 // ----------------------------------------------------------------- Quiz
-function QuizTab({ id, initial }: { id: string; initial: QuizQuestion[] | null }) {
+function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQuestion[] | null; initialQuizId: string | null }) {
   const [quiz, setQuiz] = useState<QuizQuestion[] | null>(initial);
+  // Quiz is a real, versioned entity now (quiz_repository.py) — track which
+  // version is on screen so grading targets it exactly, even if a newer quiz
+  // gets generated (e.g. in another tab) before this one is submitted.
+  const [quizId, setQuizId] = useState<string | null>(initialQuizId);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   // question_id -> selected answer_id
@@ -177,12 +181,12 @@ function QuizTab({ id, initial }: { id: string; initial: QuizQuestion[] | null }
   const [result, setResult] = useState<GradeResult | null>(null);
   const gen = (refresh = false) => {
     setLoading(true); setErr(''); setResult(null); setAnswers({});
-    api.quiz(id, 5, refresh).then((r) => setQuiz(r.quiz)).catch((e) => setErr(e.message)).finally(() => setLoading(false));
+    api.quiz(id, 5, refresh).then((r) => { setQuiz(r.quiz); setQuizId(r.quiz_id); }).catch((e) => setErr(e.message)).finally(() => setLoading(false));
   };
   useEffect(() => { if (!initial) gen(); }, []);
   const submit = () => {
     const arr = (quiz || []).map((q) => answers[q.question_id] ?? null);
-    api.gradeQuiz(id, arr).then(setResult).catch((e) => setErr(e.message));
+    api.gradeQuiz(id, arr, quizId ?? undefined).then(setResult).catch((e) => setErr(e.message));
   };
   if (loading) return <Spinner label="Generating quiz…" />;
   if (err) return <div className="space-y-3"><ErrorBox msg={err} /><button className={btn} onClick={() => gen()}>Retry</button></div>;

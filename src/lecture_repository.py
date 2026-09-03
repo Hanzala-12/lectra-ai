@@ -36,7 +36,6 @@ class LectureRepository:
         diarization: Optional[List[Dict]] = None,
         metadata: Optional[Dict] = None,
         student_id: Optional[str] = None,
-        audio_files: Optional[List[Dict]] = None,
     ) -> Dict[str, Any]:
         lecture_id = uuid.uuid4().hex[:12]
         record = {
@@ -48,8 +47,10 @@ class LectureRepository:
             "transcript_segments": transcript_segments or [],
             "diarization": diarization or [],
             "metadata": metadata or {},
-            "audio_files": audio_files
-            or [],  # AudioFile entity — see backend.py::process_lecture()
+            # AudioFile is now its own top-level entity — see
+            # audio_file_repository.py and backend.py::process_lecture(). Not
+            # stored on this record; study_api.py merges the latest AudioFile
+            # record back in for API responses.
             # generated artifacts (filled on demand)
             "notes": None,
             "quiz": None,

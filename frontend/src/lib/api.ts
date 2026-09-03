@@ -96,6 +96,7 @@ export type Lecture = {
   metadata: Record<string, any>;
   notes: string | null;
   quiz: QuizQuestion[] | null;
+  quiz_id: string | null;
   schedule: Schedule | null;
   evaluation: Evaluation | null;
   chat_history: { question: string; answer: string }[];
@@ -115,6 +116,7 @@ export type QuizQuestion = {
 };
 
 export type Schedule = {
+  id?: string;
   plan: { day: number; focus: string; tasks: string[]; est_minutes: number }[];
   tips: string[];
   student_id?: string;
@@ -139,6 +141,7 @@ export type ChatResponse = {
 };
 
 export type GradeResult = {
+  result_id: string;
   score: number;
   correct: number;
   total: number;
@@ -180,15 +183,18 @@ export const api = {
     ),
 
   quiz: (id: string, num_questions = 5, refresh = false) =>
-    req<{ quiz: QuizQuestion[]; cached: boolean }>(
+    req<{ quiz: QuizQuestion[]; quiz_id: string; cached: boolean }>(
       `/api/lecture/${id}/quiz?refresh=${refresh}`,
       { method: 'POST', body: JSON.stringify({ num_questions }) },
     ),
 
-  gradeQuiz: (id: string, answers: (string | null)[]) =>
+  // quiz_id is optional — omit it to grade against the latest quiz (the
+  // common case); pass it to grade against the exact version a student
+  // actually attempted, even if a newer one has since been generated.
+  gradeQuiz: (id: string, answers: (string | null)[], quiz_id?: string) =>
     req<GradeResult>(`/api/lecture/${id}/quiz/grade`, {
       method: 'POST',
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers, quiz_id }),
     }),
 
   schedule: (
