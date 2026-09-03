@@ -1003,65 +1003,28 @@ class LectraAIPipeline:
                     compute_type=asr_config["compute_type"],
                 )
 
+            # Single-pass transcription: one language-detection/VAD pass for the
+            # whole file instead of one per diarization turn (the old per-segment
+            # loop cost ~85-95s of fixed overhead PER TURN — 22 turns took ~50
+            # minutes on a 140s file). Whisper also keeps full-file context this
+            # way, which helps continuity/names across turns. Noise removal is
+            # untouched by this — it already finished at Step 6, before this point.
+            logger.info("Transcribing full audio in one pass")
+            transcript = self.asr.transcribe(str(audio_output_path))
+            logger.info(f"Transcribed: {len(transcript.get('text', ''))} characters")
+
             if diarization_results:
-                # Best practice: transcribe each speaker slice separately so Whisper
-                # sees clean, single-speaker audio — no cross-talk confusion.
-                logger.info("Transcribing per speaker segment (diarization-guided)")
-                import soundfile as sf
-                import tempfile, shutil as _shutil
-
-                full_audio_arr, full_sr = sf.read(str(audio_output_path))
-                combined_segments = []
-                full_text_parts = []
-
-                for seg in diarization_results:
-                    start_s = seg.get("start", 0)
-                    end_s = seg.get("end", 0)
-                    speaker = seg.get("speaker", "SPEAKER_00")
-
-                    start_i = int(start_s * full_sr)
-                    end_i = min(int(end_s * full_sr), len(full_audio_arr))
-                    slice_audio = full_audio_arr[start_i:end_i]
-
-                    if len(slice_audio) < full_sr * 0.2:  # skip < 200 ms clips
-                        continue
-
-                    with tempfile.NamedTemporaryFile(
-                        suffix=".wav", delete=False
-                    ) as tmp:
-                        tmp_path = tmp.name
-                    try:
-                        sf.write(tmp_path, slice_audio, full_sr)
-                        seg_transcript = self.asr.transcribe(tmp_path)
-                        seg_text = seg_transcript.get("text", "").strip()
-                    finally:
-                        try:
-                            os.remove(tmp_path)
-                        except Exception:
-                            pass
-
-                    if seg_text:
-                        combined_segments.append(
-                            {
-                                "start": round(start_s, 2),
-                                "end": round(end_s, 2),
-                                "speaker": speaker,
-                                "text": seg_text,
-                            }
-                        )
-                        full_text_parts.append(f"[{speaker}] {seg_text}")
-
-                transcript = {
-                    "text": "\n".join(full_text_parts),
-                    "segments": combined_segments,
-                }
-                logger.info(f"Transcribed {len(combined_segments)} speaker segments")
-            else:
-                # No diarization available — single-pass full-audio transcription
-                logger.info("No diarization — transcribing full audio in one pass")
-                transcript = self.asr.transcribe(str(audio_output_path))
+                # Attach speaker labels post-hoc via time-overlap matching against
+                # the diarization turns (src/asr_processor.py::combine_with_diarization).
+                combined_segments = self.asr.combine_with_diarization(
+                    transcript, diarization_results
+                )
+                transcript["segments"] = combined_segments
+                transcript["text"] = "\n".join(
+                    f"[{seg['speaker']}] {seg['text']}" for seg in combined_segments
+                )
                 logger.info(
-                    f"Transcribed: {len(transcript.get('text', ''))} characters"
+                    f"Attached speaker labels to {len(combined_segments)} segments"
                 )
 
             # Save transcript
