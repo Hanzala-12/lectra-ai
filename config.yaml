@@ -32,7 +32,7 @@ neural_enhancer:
   model: "metricgan-plus-voicebank"
 
 low_band_denoise:
-  enabled: false    # OFF — MetricGAN+ handles the rumble now
+  enabled: false    # OFF — MetricGAN+ handles the rumble now (reverted to original default)
   cutoff_hz: 700
   strength: 0.85
 
@@ -41,7 +41,7 @@ low_band_denoise:
 # "broken-speaker". SNR-guarded — if any stage would add noise it auto-disables.
 # Does NOT touch noise removal or diarization.
 beautify:
-  enabled: false                 # OFF — output is the raw 16kHz DFN->MetricGAN+ cleaned voice
+  enabled: false                 # OFF — output is the raw 16kHz DFN->MetricGAN+ cleaned voice (reverted to original default)
   target_loudness_dbfs: -19      # consistent broadcast-ish loudness
   max_snr_drop_db: 6             # safety: abort a stage if speech-to-noise drops more than this
   tone:
@@ -64,14 +64,14 @@ diarization:
   max_speakers: 10
   
 asr:
-  skip: true  # disabled for now
+  skip: false  # enabled for transcript + study assistant flow
   model: "turbo"  # tiny, base, small, medium, large, large-v3, turbo (recommended)
   language: null  # auto-detect if null
   compute_type: "int8"  # int8 (fastest on CPU), float16, or float32
   device: "cpu"  # cpu or cuda (auto-detect if not set)
   
 cache:
-  enabled: false  # DISABLED for testing new voice isolation architecture
+  enabled: true  # speed up repeated processing of the same file/config
 
 # ============================================================================
 # Custom DSP Modules (Experimental - disabled by default)

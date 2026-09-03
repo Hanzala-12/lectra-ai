@@ -13,6 +13,10 @@ services:
       - ./outputs:/app/outputs
       - ./config.yaml:/app/config.yaml
     environment:
+      # NOTE: ENV / MODEL_CACHE_DIR / ENABLE_GPU / REDIS_URL are not currently
+      # read by backend.py or src/ (see .env.example for the confirmed list of
+      # env vars that actually do something). Kept here as documented intent —
+      # wire them up for real before relying on them in a deployment.
       - ENV=production
       - MODEL_CACHE_DIR=/app/models
       - ENABLE_GPU=false
@@ -34,6 +38,9 @@ services:
       - backend
     restart: unless-stopped
   
+  # Provisioned but not used by any application code today (src/cache_manager.py
+  # is a plain local-filesystem cache). Either wire this up for real caching or
+  # remove it to stop shipping an unused container.
   redis:
     image: redis:7-alpine
     container_name: lectra-ai-redis
