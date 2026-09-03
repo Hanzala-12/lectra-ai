@@ -1,38 +1,14 @@
-import React, { useState, MouseEvent } from 'react';
-import { User, Lock, ArrowRight, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, Lock, ArrowRight, Loader2, AlertCircle, GraduationCap } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
 export function Login() {
-  const [rotation, setRotation] = useState({ x: 0, y: 0 });
-  const [isHovered, setIsHovered] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-
-  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!e.currentTarget) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-
-    // Reduced tilt intensity from 15 to 5 for a more subtle, natural feel
-    const rotateX = ((y - centerY) / centerY) * -5;
-    const rotateY = ((x - centerX) / centerX) * 5;
-
-    setRotation({ x: rotateX, y: rotateY });
-  };
-
-  const handleMouseLeave = () => {
-    setRotation({ x: 0, y: 0 });
-    setIsHovered(false);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,148 +29,84 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center relative overflow-hidden font-sans perspective-1000">
-      {/* Animated 3D Background Elements */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute top-[20%] left-[20%] w-96 h-96 bg-primary/20 rounded-full mix-blend-screen filter blur-[100px] animate-pulse" />
-        <div className="absolute bottom-[20%] right-[20%] w-[500px] h-[500px] bg-accent/20 rounded-full mix-blend-screen filter blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-[40%] left-[50%] w-72 h-72 bg-purple-500/20 rounded-full mix-blend-screen filter blur-[80px] animate-pulse" style={{ animationDelay: '4s' }} />
-      </div>
-
-      <div className="w-full max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center z-10">
-        {/* Left Side: 3D Marketing Text */}
-        <div className="hidden md:flex flex-col gap-6 animate-in slide-in-from-left-8 fade-in duration-1000">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface border border-white/10 w-fit backdrop-blur-md shadow-sm">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium tracking-wide">Welcome to the Future of Learning</span>
-          </div>
-          <h1 className="text-5xl lg:text-7xl font-bold tracking-tight leading-tight drop-shadow-2xl">
-            Unlock your <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
-              Brilliance.
-            </span>
-          </h1>
-          <p className="text-lg text-muted max-w-md leading-relaxed">
-            Join Lectra-AI to instantly transcribe, analyze, and learn from any lecture. Your ultimate AI study companion awaits.
-          </p>
-          <div className="mt-8 flex items-center gap-4">
-            <div className="flex -space-x-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="w-12 h-12 rounded-full border-2 border-bg bg-surface2 flex items-center justify-center text-xs font-bold text-text shadow-lg z-10">
-                  U{i}
-                </div>
-              ))}
+    <div className="min-h-screen bg-bg flex items-center justify-center px-8 py-16">
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center text-center mb-9">
+          <Link to="/" className="flex items-center gap-2.5 mb-8">
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-white">
+              <GraduationCap className="w-[18px] h-[18px]" />
             </div>
-            <span className="text-sm font-medium text-muted">+1,000 students joined</span>
-          </div>
+            <span className="font-serif font-semibold text-xl tracking-tight text-text">Lectra</span>
+          </Link>
+          <h1 className="font-serif text-3xl font-semibold tracking-tight text-text mb-2">Welcome back</h1>
+          <p className="text-muted text-sm">Enter your details to access your dashboard</p>
         </div>
 
-        {/* Right Side: 3D Interactive Card */}
-        <div className="flex justify-center perspective-1000">
-          <div
-            onMouseMove={handleMouseMove}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={handleMouseLeave}
-            className="w-full max-w-md relative transition-transform duration-200 ease-out preserve-3d"
-            style={{
-              transform: isHovered
-                ? `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg) translateZ(30px)`
-                : 'rotateX(0deg) rotateY(0deg) translateZ(0px)',
-              transformStyle: 'preserve-3d'
-            }}
-          >
-            {/* Glossy Card */}
-            <div className="bg-surface/60 backdrop-blur-xl border border-white/10 p-10 rounded-3xl shadow-xl relative overflow-hidden">
+        <form className="space-y-5" onSubmit={handleSubmit}>
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg bg-error-light px-4 py-3 text-sm text-error">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
-              {/* Inner Glow */}
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-50 pointer-events-none" />
-
-              <div className="relative z-10" style={{ transform: 'translateZ(40px)' }}>
-                <div className="mb-10 text-center">
-                  <h2 className="text-3xl font-bold tracking-tight mb-2">Welcome Back</h2>
-                  <p className="text-muted text-sm">Enter your details to access your dashboard</p>
-                </div>
-
-                <form className="space-y-6" onSubmit={handleSubmit}>
-                  {error && (
-                    <div className="flex items-start gap-2 rounded-xl border border-error/30 bg-error-light px-4 py-3 text-sm text-error">
-                      <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                      <span>{error}</span>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted ml-1">Username</label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
-                        <User className="w-5 h-5" />
-                      </div>
-                      <input
-                        type="text"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        autoComplete="username"
-                        className="w-full bg-bg/50 border border-border rounded-xl py-3.5 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
-                        placeholder="hanzala"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between ml-1">
-                      <label className="text-sm font-medium text-muted">Password</label>
-                    </div>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
-                        <Lock className="w-5 h-5" />
-                      </div>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="current-password"
-                        className="w-full bg-bg/50 border border-border rounded-xl py-3.5 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
-                        placeholder="••••••••"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full mt-8 bg-primary hover:bg-primary-dark text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg group overflow-hidden relative disabled:opacity-60"
-                  >
-                    <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
-                    {loading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <span>Sign In</span>
-                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
-                  </button>
-
-                  <div className="mt-8 text-center text-sm text-muted">
-                    Don't have an account?{' '}
-                    <Link to="/signup" className="font-bold text-primary hover:text-primary-dark transition-colors">
-                      Sign up for free
-                    </Link>
-                  </div>
-                </form>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-text">Username</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted">
+                <User className="w-4 h-4" />
               </div>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                className="w-full bg-surface border border-border rounded-lg py-3 pl-10 pr-4 text-text placeholder:text-muted/60 focus:border-primary outline-none transition-colors text-sm"
+                placeholder="hanzala"
+              />
             </div>
           </div>
-        </div>
-      </div>
 
-      <style>{`
-        .perspective-1000 { perspective: 1000px; }
-        .preserve-3d { transform-style: preserve-3d; }
-        @keyframes shimmer {
-          100% { transform: translateX(100%); }
-        }
-      `}</style>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-text">Password</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted">
+                <Lock className="w-4 h-4" />
+              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="w-full bg-surface border border-border rounded-lg py-3 pl-10 pr-4 text-text placeholder:text-muted/60 focus:border-primary outline-none transition-colors text-sm"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full mt-2 bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <span>Sign In</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+
+          <div className="text-center text-sm text-muted">
+            Don't have an account?{' '}
+            <Link to="/signup" className="font-semibold text-primary hover:text-primary-dark transition-colors">
+              Sign up for free
+            </Link>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
