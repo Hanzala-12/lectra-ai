@@ -20,6 +20,9 @@ class LLMNotConfigured(Exception):
     """Raised when an LLM call is attempted without an API key."""
 
 
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
 class LLMClient:
     def __init__(
         self,
@@ -27,6 +30,7 @@ class LLMClient:
         model: Optional[str] = None,
         base_url: Optional[str] = None,
         timeout: float = 60.0,
+        max_retries: int = 2,
     ):
         # Read provider settings from env so the key can be dropped in later.
         self.api_key = (
@@ -40,6 +44,10 @@ class LLMClient:
         # A small, capable, inexpensive default; override via env if desired.
         self.model = model or os.getenv("OPENROUTER_MODEL") or "openai/gpt-4o-mini"
         self.timeout = timeout
+        # Free-tier models in particular are prone to transient 429s (shared
+        # rate-limit pools) - retry those (and 5xx/network errors) with
+        # backoff instead of failing the whole request on the first hiccup.
+        self.max_retries = max_retries
 
     def is_configured(self) -> bool:
         return bool(self.api_key)
@@ -59,6 +67,7 @@ class LLMClient:
             )
 
         import httpx
+        import time as _time
 
         payload: Dict[str, Any] = {
             "model": self.model,
@@ -77,24 +86,45 @@ class LLMClient:
             "X-Title": "Lectra AI",
         }
 
-        try:
-            with httpx.Client(timeout=self.timeout) as client:
-                resp = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload,
+        for attempt in range(self.max_retries + 1):
+            is_last_attempt = attempt == self.max_retries
+            try:
+                with httpx.Client(timeout=self.timeout) as client:
+                    resp = client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=headers,
+                        json=payload,
+                    )
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                if is_last_attempt:
+                    logger.error(f"LLM request failed: {e}")
+                    raise
+                wait = min(2**attempt, 10)
+                logger.warning(
+                    f"LLM request failed ({e}); retrying in {wait}s "
+                    f"(attempt {attempt + 1}/{self.max_retries})"
                 )
+                _time.sleep(wait)
+                continue
+
+            if resp.status_code in RETRYABLE_STATUS_CODES and not is_last_attempt:
+                wait = min(float(resp.headers.get("Retry-After", 2**attempt)), 10)
+                logger.warning(
+                    f"LLM request got HTTP {resp.status_code}; retrying in {wait:.1f}s "
+                    f"(attempt {attempt + 1}/{self.max_retries})"
+                )
+                _time.sleep(wait)
+                continue
+
+            try:
                 resp.raise_for_status()
-                data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                f"LLM HTTP error {e.response.status_code}: {e.response.text[:300]}"
-            )
-            raise
-        except Exception as e:
-            logger.error(f"LLM request failed: {e}")
-            raise
+            except httpx.HTTPStatusError as e:
+                logger.error(
+                    f"LLM HTTP error {e.response.status_code}: {e.response.text[:300]}"
+                )
+                raise
+            data = resp.json()
+            return data["choices"][0]["message"]["content"].strip()
 
     def complete(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
         messages = []
