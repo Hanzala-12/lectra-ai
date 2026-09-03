@@ -71,34 +71,13 @@
   --color-warning-light: #2c2013;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --color-bg: #16151a;
-    --color-surface: #1d1c22;
-    --color-surface2: #26252c;
-    --color-border: #333139;
-    --color-border2: #46434e;
-    --color-text: #f3f1eb;
-    --color-muted: #9b978f;
-
-    --color-primary: #4fb8cf;
-    --color-primary-light: #1c3238;
-    --color-primary-dark: #7cd0e2;
-
-    --color-accent: #ee6ba8;
-    --color-accent-light: #35202c;
-    --color-accent2: #f491bf;
-
-    --color-success: #4ecb9a;
-    --color-success-light: #12281f;
-
-    --color-error: #ea8079;
-    --color-error-light: #2e1917;
-
-    --color-warning: #dba05a;
-    --color-warning-light: #2c2013;
-  }
-}
+/* Deliberately NOT wired to `@media (prefers-color-scheme: dark)`. The
+   reference design (the user's PDF) is exclusively light — always matching
+   it regardless of the visitor's OS/browser theme setting removes any
+   ambiguity about whether what's on screen matches the source of truth.
+   The dark palette above stays in place and fully working for a future
+   manual toggle (anything that sets data-theme="dark" on <html>) — it's
+   just not auto-activated by system preference anymore. */
 
 @layer base {
   body {
