@@ -1,38 +1,119 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --color-bg: #fafafa;
+  /* Neutral surface scale — a soft, faintly cool off-white rather than a
+     stark #fafafa, so cards read as "raised" against the page instead of
+     everything sitting at the same flat plane. */
+  --color-bg: #f6f7fb;
   --color-surface: #ffffff;
-  --color-surface2: #f4f4f5;
-  --color-border: #e4e4e7;
-  --color-border2: #d4d4d8;
-  --color-text: #09090b;
-  --color-muted: #71717a;
-  
-  --color-accent: #000000;
-  --color-accent2: #27272a;
-  --color-accent-light: #f4f4f5;
-  
-  --color-primary: #2563eb;
-  --color-primary-light: #eff6ff;
-  --color-primary-dark: #1d4ed8;
-  
-  --color-success: #16a34a;
-  --color-success-light: #f0fdf4;
-  
+  --color-surface2: #eef0f7;
+  --color-border: #e2e4ee;
+  --color-border2: #c9cce0;
+  --color-text: #14162b;
+  --color-muted: #6b6f8c;
+
+  /* One brand color drives every interactive/emphasis element — no more
+     competing pure-black "accent" fighting the blue primary for attention. */
+  --color-primary: #4338ca;
+  --color-primary-light: #eef0ff;
+  --color-primary-dark: #362da3;
+
+  /* Secondary accent (violet) for variety in badges/status without
+     resorting to arbitrary rainbow colors per card. */
+  --color-accent: #7c3aed;
+  --color-accent-light: #f3ebff;
+  --color-accent2: #6425d0;
+
+  --color-success: #15945c;
+  --color-success-light: #eafbf3;
+
   --color-error: #dc2626;
   --color-error-light: #fef2f2;
-  
+
   --color-warning: #d97706;
   --color-warning-light: #fffbeb;
+
+  --shadow-soft: 0 1px 2px rgba(20, 22, 43, 0.04), 0 8px 24px -12px rgba(20, 22, 43, 0.10);
+  --shadow-soft-lg: 0 4px 12px rgba(20, 22, 43, 0.06), 0 16px 40px -16px rgba(20, 22, 43, 0.16);
+}
+
+:root[data-theme="dark"] {
+  --color-bg: #0d0e1a;
+  --color-surface: #15172a;
+  --color-surface2: #1c1f38;
+  --color-border: #292c4a;
+  --color-border2: #383c63;
+  --color-text: #eef0fb;
+  --color-muted: #9296bb;
+
+  --color-primary: #818cf8;
+  --color-primary-light: #23264a;
+  --color-primary-dark: #a5b0fb;
+
+  --color-accent: #c084fc;
+  --color-accent-light: #2a1f45;
+  --color-accent2: #d8b4fe;
+
+  --color-success: #34d399;
+  --color-success-light: #0f2a20;
+
+  --color-error: #f87171;
+  --color-error-light: #341414;
+
+  --color-warning: #fbbf24;
+  --color-warning-light: #332107;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #0d0e1a;
+    --color-surface: #15172a;
+    --color-surface2: #1c1f38;
+    --color-border: #292c4a;
+    --color-border2: #383c63;
+    --color-text: #eef0fb;
+    --color-muted: #9296bb;
+
+    --color-primary: #818cf8;
+    --color-primary-light: #23264a;
+    --color-primary-dark: #a5b0fb;
+
+    --color-accent: #c084fc;
+    --color-accent-light: #2a1f45;
+    --color-accent2: #d8b4fe;
+
+    --color-success: #34d399;
+    --color-success-light: #0f2a20;
+
+    --color-error: #f87171;
+    --color-error-light: #341414;
+
+    --color-warning: #fbbf24;
+    --color-warning-light: #332107;
+  }
 }
 
 @layer base {
   body {
     @apply bg-bg text-text font-sans antialiased selection:bg-primary/20 selection:text-primary;
+  }
+}
+
+@layer utilities {
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+
+  .shadow-soft { box-shadow: var(--shadow-soft); }
+  .shadow-soft-lg { box-shadow: var(--shadow-soft-lg); }
+
+  /* Subtle dot-grid texture for the app shell background — cheap way to add
+     depth without a heavy illustration/image asset. */
+  .bg-dot-grid {
+    background-image: radial-gradient(circle, var(--color-border2) 1px, transparent 1px);
+    background-size: 20px 20px;
   }
 }

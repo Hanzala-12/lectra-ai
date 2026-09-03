@@ -3,10 +3,11 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   FileText, NotebookPen, HelpCircle, CalendarDays, BarChart3, MessageSquare,
   Loader2, AlertCircle, RefreshCw, Send, CheckCircle2, XCircle, ArrowLeft,
+  Music, Sparkles, Users, Clock, Sparkle,
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
-  type Schedule, type Evaluation, type ChatResponse,
+  type Schedule, type Evaluation, type ChatResponse, type AudioFile,
 } from '../lib/api';
 
 type Tab = 'transcript' | 'notes' | 'quiz' | 'schedule' | 'evaluation' | 'chat';
@@ -19,13 +20,14 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'chat', label: 'Chat', icon: <MessageSquare className="w-4 h-4" /> },
 ];
 
-const card = 'rounded-xl border border-border bg-surface p-5';
-const btn = 'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-dark disabled:opacity-50';
+const card = 'rounded-2xl border border-border bg-surface p-5 shadow-soft';
+const btn = 'inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark shadow-soft disabled:opacity-50 disabled:pointer-events-none transition-all';
+const btnGhost = 'text-sm text-muted hover:text-text inline-flex items-center gap-1.5 font-medium transition-colors';
 
 function Spinner({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-2 text-muted text-sm py-8 justify-center">
-      <Loader2 className="w-4 h-4 animate-spin" /> {label}
+    <div className="flex flex-col items-center gap-3 text-muted text-sm py-16 justify-center">
+      <Loader2 className="w-6 h-6 animate-spin text-primary" /> {label}
     </div>
   );
 }
@@ -33,8 +35,8 @@ function Spinner({ label }: { label: string }) {
 function ErrorBox({ msg }: { msg: string }) {
   const isLLM = /not configured|credits|402|503/i.test(msg);
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-      <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+    <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+      <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
       <div>
         <p className="text-text">{msg}</p>
         {isLLM && (
@@ -63,27 +65,37 @@ export function Lecture() {
 
   const selectTab = (t: Tab) => { setTab(t); setParams({ tab: t }, { replace: true }); };
 
-  if (loading) return <div className="p-8"><Spinner label="Loading lecture…" /></div>;
-  if (err || !lecture) return <div className="p-8"><ErrorBox msg={err || 'Lecture not found'} /></div>;
+  if (loading) return <div className="max-w-6xl mx-auto px-6 py-10 md:pl-2"><Spinner label="Loading lecture…" /></div>;
+  if (err || !lecture) return <div className="max-w-6xl mx-auto px-6 py-10 md:pl-2"><ErrorBox msg={err || 'Lecture not found'} /></div>;
+
+  const durationMin = lecture.metadata?.duration_processed ? Math.round(lecture.metadata.duration_processed / 60) : null;
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <Link to="/app/library" className="inline-flex items-center gap-1 text-sm text-muted hover:text-text mb-4">
-        <ArrowLeft className="w-4 h-4" /> Library
+    <div className="max-w-6xl mx-auto px-6 py-8 md:pl-2">
+      <Link to="/app/library" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-text mb-5 font-medium transition-colors">
+        <ArrowLeft className="w-4 h-4" /> Back to Library
       </Link>
-      <h1 className="text-2xl font-bold text-text mb-1">{lecture.title}</h1>
-      <p className="text-sm text-muted mb-5">
-        {lecture.transcript_text.split(/\s+/).length} words
-        {lecture.metadata?.duration_processed ? ` · ${Math.round(lecture.metadata.duration_processed)}s audio` : ''}
-      </p>
 
-      <div className="flex flex-wrap gap-1 border-b border-border mb-5">
+      <div className="flex items-start gap-4 mb-7">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 shadow-soft">
+          <Music className="w-6 h-6 text-white" />
+        </div>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-text mb-1.5 truncate">{lecture.title}</h1>
+          <p className="text-sm text-muted flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>{lecture.transcript_text.split(/\s+/).filter(Boolean).length} words</span>
+            {durationMin != null && <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {durationMin} min audio</span>}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 p-1.5 bg-surface2 rounded-2xl mb-6 w-fit max-w-full overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => selectTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition ${
-              tab === t.id ? 'border-primary text-primary font-medium' : 'border-transparent text-muted hover:text-text'
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-sm rounded-xl font-medium transition-all whitespace-nowrap ${
+              tab === t.id ? 'bg-surface text-primary shadow-soft' : 'text-muted hover:text-text'
             }`}
           >
             {t.icon} {t.label}
@@ -102,41 +114,64 @@ export function Lecture() {
 }
 
 // ----------------------------------------------------------------- Transcript
+const AUDIO_KIND_LABEL: Record<string, string> = { original: 'Original recording', cleaned: 'Cleaned audio' };
+function audioLabel(kind: string) {
+  if (AUDIO_KIND_LABEL[kind]) return AUDIO_KIND_LABEL[kind];
+  if (kind.startsWith('speaker:')) return kind.replace('speaker:', '').replace(/_/g, ' ');
+  return kind;
+}
+
+// Not a component (kept as a function returning JSX, called inline in the
+// .map() below) — this project has no @types/react anywhere (no
+// @types/react/@types/react-dom in package.json or node_modules), so `key`
+// isn't recognized as a reserved React prop on a locally-declared function
+// component and trips a type error. A plain helper that the caller wraps in
+// a keyed element avoids the issue entirely.
+function audioCardContent(a: AudioFile) {
+  const isSpeaker = a.kind.startsWith('speaker:');
+  return (
+    <div className="rounded-xl bg-surface2 p-4">
+      <div className="flex items-center gap-2 mb-2.5">
+        {isSpeaker ? <Users className="w-3.5 h-3.5 text-primary" /> : <Music className="w-3.5 h-3.5 text-primary" />}
+        <span className="text-sm font-medium text-text">{audioLabel(a.kind)}</span>
+        {a.duration != null && <span className="text-xs text-muted ml-auto">{Math.round(a.duration)}s</span>}
+      </div>
+      <audio controls className="w-full h-9" src={buildUrl(a.file_path)} />
+    </div>
+  );
+}
+
 function TranscriptTab({ lecture }: { lecture: LectureT }) {
   const audioFiles = lecture.audio_files || [];
   const legacyAudio = lecture.metadata?.audio_url;
   return (
-    <div className="space-y-4">
-      {audioFiles.length > 0 ? (
-        <div className={`${card} space-y-3`}>
-          {audioFiles.map((a) => (
-            <div key={a.audio_id}>
-              <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
-                {a.kind}{a.duration ? ` · ${Math.round(a.duration)}s` : ''}
-              </p>
-              <audio controls className="w-full" src={buildUrl(a.file_path)} />
-            </div>
-          ))}
-        </div>
-      ) : legacyAudio ? (
-        <div className={card}>
-          <p className="text-sm font-medium text-text mb-2">Cleaned audio</p>
-          <audio controls className="w-full" src={buildUrl(legacyAudio)} />
-        </div>
-      ) : null}
+    <div className="grid md:grid-cols-[280px_1fr] gap-5">
+      <div className="space-y-3 md:sticky md:top-6 md:self-start">
+        {audioFiles.length > 0 ? (
+          <div className={`${card} space-y-3`}>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Audio</p>
+            {audioFiles.map((a) => <div key={a.audio_id}>{audioCardContent(a)}</div>)}
+          </div>
+        ) : legacyAudio ? (
+          <div className={card}>
+            <p className="text-sm font-medium text-text mb-2">Cleaned audio</p>
+            <audio controls className="w-full" src={buildUrl(legacyAudio)} />
+          </div>
+        ) : null}
+      </div>
       <div className={card}>
         {lecture.transcript_segments?.length ? (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
             {lecture.transcript_segments.map((s, i) => (
-              <p key={i} className="text-sm text-text">
-                {s.speaker && <span className="text-primary font-medium mr-2">{s.speaker}</span>}
-                <span className="text-muted font-mono text-xs mr-2">{Math.floor(s.start)}s</span>
+              <p key={i} className="text-sm text-text leading-relaxed">
+                {s.speaker && <span className="text-primary font-semibold mr-2">{s.speaker.replace('SPEAKER_', 'Speaker ')}</span>}
+                <span className="text-muted text-xs mr-2 tabular-nums">{Math.floor(s.start / 60)}:{String(Math.floor(s.start % 60)).padStart(2, '0')}</span>
                 {s.text}
               </p>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-text whitespace-pre-wrap">{lecture.transcript_text}</p>
+          <p className="text-sm text-text whitespace-pre-wrap leading-relaxed">{lecture.transcript_text}</p>
         )}
       </div>
     </div>
@@ -158,8 +193,8 @@ function NotesTab({ id, initial }: { id: string; initial: string | null }) {
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <button className="text-sm text-muted hover:text-text inline-flex items-center gap-1" onClick={() => gen(true)}>
-          <RefreshCw className="w-4 h-4" /> Regenerate
+        <button className={btnGhost} onClick={() => gen(true)}>
+          <RefreshCw className="w-3.5 h-3.5" /> Regenerate
         </button>
       </div>
       <div className={card}><pre className="whitespace-pre-wrap font-sans text-sm text-text leading-relaxed">{notes}</pre></div>
@@ -188,44 +223,62 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
     const arr = (quiz || []).map((q) => answers[q.question_id] ?? null);
     api.gradeQuiz(id, arr, quizId ?? undefined).then(setResult).catch((e) => setErr(e.message));
   };
-  if (loading) return <Spinner label="Generating quiz…" />;
+  if (loading) return <Spinner label="Writing a quiz from this lecture…" />;
   if (err) return <div className="space-y-3"><ErrorBox msg={err} /><button className={btn} onClick={() => gen()}>Retry</button></div>;
   if (!quiz?.length) return <p className="text-muted text-sm">No quiz available.</p>;
+  const answeredCount = Object.keys(answers).length;
   return (
     <div className="space-y-4">
+      {result && (
+        <div className={`${card} flex items-center gap-5`}>
+          <div className="relative w-16 h-16 shrink-0">
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-surface2)" strokeWidth="10" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke={result.score >= 70 ? 'var(--color-success)' : 'var(--color-warning)'} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${result.score * 2.64} 264`} />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-text">{Math.round(result.score)}%</div>
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-text">{result.correct} of {result.total} correct</p>
+            <p className="text-sm text-muted">{result.score >= 70 ? 'Nice work — you know this material.' : 'Review the explanations below, then try a new quiz.'}</p>
+          </div>
+          <button className={btnGhost} onClick={() => gen(true)}>
+            <RefreshCw className="w-3.5 h-3.5" /> New quiz
+          </button>
+        </div>
+      )}
       {quiz.map((q, qi) => {
         return (
           <div key={q.question_id} className={card}>
-            <p className="font-medium text-text mb-3">{qi + 1}. {q.question}</p>
+            <p className="font-medium text-text mb-3.5">{qi + 1}. {q.question}</p>
             <div className="space-y-2">
               {q.answers.map((a) => {
                 const picked = answers[q.question_id] === a.answer_id;
-                let cls = 'border-border hover:border-primary/50';
+                let cls = 'border-border hover:border-primary/40 hover:bg-primary-light/40';
                 if (result) {
-                  if (a.is_correct) cls = 'border-green-500 bg-green-500/10';
-                  else if (picked) cls = 'border-red-500 bg-red-500/10';
+                  if (a.is_correct) cls = 'border-success bg-success-light';
+                  else if (picked) cls = 'border-error bg-error-light';
+                  else cls = 'border-border opacity-60';
                 }
                 return (
                   <button key={a.answer_id} disabled={!!result}
                     onClick={() => setAnswers({ ...answers, [q.question_id]: a.answer_id })}
-                    className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition ${picked && !result ? 'border-primary bg-primary/10' : cls}`}>
+                    className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm transition-all flex items-center justify-between gap-2 ${picked && !result ? 'border-primary bg-primary-light font-medium' : cls}`}>
                     {a.text}
+                    {result && a.is_correct && <CheckCircle2 className="w-4 h-4 text-success shrink-0" />}
+                    {result && picked && !a.is_correct && <XCircle className="w-4 h-4 text-error shrink-0" />}
                   </button>
                 );
               })}
             </div>
-            {result && <p className="text-xs text-muted mt-2">{q.explanation}</p>}
+            {result && <p className="text-xs text-muted mt-3 leading-relaxed">{q.explanation}</p>}
           </div>
         );
       })}
-      {!result ? (
-        <button className={btn} onClick={submit} disabled={Object.keys(answers).length < quiz.length}>Submit answers</button>
-      ) : (
-        <div className={`${card} flex items-center justify-between`}>
-          <p className="text-lg font-bold text-text">Score: {result.score}% ({result.correct}/{result.total})</p>
-          <button className="text-sm text-muted hover:text-text inline-flex items-center gap-1" onClick={() => gen(true)}>
-            <RefreshCw className="w-4 h-4" /> New quiz
-          </button>
+      {!result && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted">{answeredCount} of {quiz.length} answered</p>
+          <button className={btn} onClick={submit} disabled={answeredCount < quiz.length}>Submit answers</button>
         </div>
       )}
     </div>
@@ -248,31 +301,34 @@ function ScheduleTab({ id, initial }: { id: string; initial: Schedule | null }) 
       .finally(() => setLoading(false));
   };
 
-  if (loading) return <Spinner label="Building study plan…" />;
+  if (loading) return <Spinner label="Building your study plan…" />;
   if (err) return <div className="space-y-3"><ErrorBox msg={err} /><button className={btn} onClick={() => gen()}>Retry</button></div>;
 
   // No plan yet — collect the real inputs the plan should be built around
   // (StudyPlan.available_time / StudyPlan.learning_goals) before generating.
   if (!sch?.plan) {
     return (
-      <div className={`${card} space-y-4`}>
+      <div className={`${card} max-w-lg space-y-5`}>
+        <div className="flex items-center gap-2 text-text font-semibold">
+          <Sparkle className="w-4 h-4 text-primary" /> Personalize your plan
+        </div>
         <div>
-          <label className="text-sm font-medium text-text block mb-1">How much time do you have?</label>
+          <label className="text-sm font-medium text-text block mb-1.5">How much time do you have?</label>
           <input
             value={availableTime}
             onChange={(e) => setAvailableTime(e.target.value)}
             placeholder="e.g. 1 hour per day"
-            className="w-full px-3 py-2 rounded-lg border border-border bg-surface2 text-sm outline-none focus:border-primary"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface2 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
           />
         </div>
         <div>
-          <label className="text-sm font-medium text-text block mb-1">What are your learning goals?</label>
+          <label className="text-sm font-medium text-text block mb-1.5">What are your learning goals?</label>
           <textarea
             value={learningGoals}
             onChange={(e) => setLearningGoals(e.target.value)}
             placeholder="e.g. understand this well enough for my midterm"
             rows={2}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-surface2 text-sm outline-none focus:border-primary resize-none"
+            className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface2 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 resize-none transition-all"
           />
         </div>
         <button className={btn} onClick={() => gen()}>Build my study plan</button>
@@ -283,31 +339,43 @@ function ScheduleTab({ id, initial }: { id: string; initial: Schedule | null }) 
   return (
     <div className="space-y-3">
       {(sch.available_time || sch.learning_goals) && (
-        <div className={`${card} text-sm text-muted`}>
-          {sch.available_time && <p>⏱ {sch.available_time}</p>}
-          {sch.learning_goals && <p>🎯 {sch.learning_goals}</p>}
+        <div className={`${card} text-sm text-muted flex flex-wrap gap-x-5 gap-y-1`}>
+          {sch.available_time && <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {sch.available_time}</span>}
+          {sch.learning_goals && <span className="inline-flex items-center gap-1.5"><Sparkle className="w-3.5 h-3.5" /> {sch.learning_goals}</span>}
         </div>
       )}
-      {sch.plan.map((d) => (
-        <div key={d.day} className={card}>
-          <div className="flex justify-between items-center mb-2">
-            <p className="font-medium text-text">Day {d.day} — {d.focus}</p>
-            <span className="text-xs text-muted">{d.est_minutes} min</span>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {sch.plan.map((d) => (
+          <div key={d.day} className={card}>
+            <div className="flex justify-between items-center mb-2.5">
+              <p className="font-semibold text-text">Day {d.day} · {d.focus}</p>
+              <span className="text-xs text-muted shrink-0 ml-2">{d.est_minutes} min</span>
+            </div>
+            <ul className="space-y-1.5">
+              {d.tasks?.map((t, i) => (
+                <li key={i} className="text-sm text-muted flex items-start gap-2">
+                  <span className="w-1 h-1 rounded-full bg-muted mt-2 shrink-0" /> {t}
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="list-disc list-inside text-sm text-muted space-y-1">
-            {d.tasks?.map((t, i) => <li key={i}>{t}</li>)}
-          </ul>
-        </div>
-      ))}
+        ))}
+      </div>
       {sch.tips?.length > 0 && (
         <div className={card}>
-          <p className="font-medium text-text mb-2">Tips</p>
-          <ul className="list-disc list-inside text-sm text-muted space-y-1">{sch.tips.map((t, i) => <li key={i}>{t}</li>)}</ul>
+          <p className="font-semibold text-text mb-2.5 flex items-center gap-1.5"><Sparkle className="w-4 h-4 text-primary" /> Tips</p>
+          <ul className="space-y-1.5">
+            {sch.tips.map((t, i) => (
+              <li key={i} className="text-sm text-muted flex items-start gap-2">
+                <span className="w-1 h-1 rounded-full bg-muted mt-2 shrink-0" /> {t}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       <div className="flex justify-end">
-        <button className="text-sm text-muted hover:text-text inline-flex items-center gap-1" onClick={() => gen(true)}>
-          <RefreshCw className="w-4 h-4" /> Rebuild plan
+        <button className={btnGhost} onClick={() => gen(true)}>
+          <RefreshCw className="w-3.5 h-3.5" /> Rebuild plan
         </button>
       </div>
     </div>
@@ -324,24 +392,36 @@ function EvaluationTab({ id, initial }: { id: string; initial: Evaluation | null
     api.evaluate(id, refresh).then((r) => setEv(r.evaluation)).catch((e) => setErr(e.message)).finally(() => setLoading(false));
   };
   useEffect(() => { if (!initial) gen(); }, []);
-  if (loading) return <Spinner label="Analyzing lecture…" />;
+  if (loading) return <Spinner label="Analyzing lecture difficulty and topics…" />;
   if (err) return <div className="space-y-3"><ErrorBox msg={err} /><button className={btn} onClick={() => gen()}>Retry</button></div>;
   if (!ev) return <p className="text-muted text-sm">No analysis.</p>;
   return (
     <div className="space-y-3">
-      <div className={`${card} grid grid-cols-2 gap-4`}>
-        <div><p className="text-xs text-muted">Difficulty</p><p className="text-text font-medium capitalize">{ev.difficulty}</p></div>
-        <div><p className="text-xs text-muted">Est. study time</p><p className="text-text font-medium">{ev.estimated_study_minutes} min</p></div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className={card}>
+          <p className="text-xs text-muted mb-1.5 font-medium uppercase tracking-wide">Difficulty</p>
+          <p className="text-text font-bold text-lg capitalize">{ev.difficulty}</p>
+        </div>
+        <div className={card}>
+          <p className="text-xs text-muted mb-1.5 font-medium uppercase tracking-wide">Est. study time</p>
+          <p className="text-text font-bold text-lg">{ev.estimated_study_minutes} min</p>
+        </div>
       </div>
-      <div className={card}><p className="font-medium text-text mb-2">Summary</p><p className="text-sm text-muted">{ev.summary}</p></div>
+      <div className={card}><p className="font-semibold text-text mb-2">Summary</p><p className="text-sm text-muted leading-relaxed">{ev.summary}</p></div>
       <div className={card}>
-        <p className="font-medium text-text mb-2">Main topics</p>
-        <div className="flex flex-wrap gap-2">{ev.main_topics?.map((t, i) => <span key={i} className="text-xs px-2 py-1 rounded-full bg-surface2 text-text border border-border">{t}</span>)}</div>
+        <p className="font-semibold text-text mb-2.5">Main topics</p>
+        <div className="flex flex-wrap gap-2">{ev.main_topics?.map((t, i) => <span key={i} className="text-xs px-2.5 py-1.5 rounded-full bg-primary-light text-primary font-medium">{t}</span>)}</div>
       </div>
       {ev.comprehension_questions?.length > 0 && (
         <div className={card}>
-          <p className="font-medium text-text mb-2">Check your understanding</p>
-          <ul className="list-disc list-inside text-sm text-muted space-y-1">{ev.comprehension_questions.map((q, i) => <li key={i}>{q}</li>)}</ul>
+          <p className="font-semibold text-text mb-2.5">Check your understanding</p>
+          <ul className="space-y-1.5">
+            {ev.comprehension_questions.map((q, i) => (
+              <li key={i} className="text-sm text-muted flex items-start gap-2">
+                <span className="w-1 h-1 rounded-full bg-muted mt-2 shrink-0" /> {q}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
@@ -369,10 +449,17 @@ function ChatTab({ id, history }: { id: string; history: { question: string; ans
   return (
     <div className="space-y-3">
       <div className={`${card} min-h-[40vh] max-h-[55vh] overflow-y-auto space-y-3`}>
-        {msgs.length === 0 && <p className="text-muted text-sm text-center py-8">Ask anything about this lecture.</p>}
+        {msgs.length === 0 && (
+          <div className="text-center py-12">
+            <div className="w-12 h-12 rounded-2xl bg-primary-light flex items-center justify-center mx-auto mb-3">
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            <p className="text-muted text-sm">Ask anything about this lecture — answers are grounded in the transcript.</p>
+          </div>
+        )}
         {msgs.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${m.role === 'user' ? 'bg-primary text-white' : 'bg-surface2 text-text border border-border'}`}>
+            <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${m.role === 'user' ? 'bg-primary text-white rounded-br-sm' : 'bg-surface2 text-text rounded-bl-sm'}`}>
               {m.text}
             </div>
           </div>
@@ -381,8 +468,8 @@ function ChatTab({ id, history }: { id: string; history: { question: string; ans
       </div>
       <div className="flex gap-2">
         <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()}
-          placeholder="Ask a question…" className="flex-1 px-3 py-2 rounded-lg border border-border bg-surface text-text text-sm outline-none focus:border-primary" />
-        <button className={btn} onClick={send} disabled={busy}><Send className="w-4 h-4" /></button>
+          placeholder="Ask a question…" className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-surface text-text text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all" />
+        <button className={`${btn} px-4`} onClick={send} disabled={busy}><Send className="w-4 h-4" /></button>
       </div>
     </div>
   );
