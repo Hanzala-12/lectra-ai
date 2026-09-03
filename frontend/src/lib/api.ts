@@ -155,6 +155,7 @@ export type Student = {
   id: string;
   username: string;
   name: string;
+  email: string | null;
   created_at: number;
 };
 
@@ -215,10 +216,10 @@ export const api = {
     }),
 
   // ---------- auth ----------
-  signup: async (username: string, password: string, name?: string) => {
+  signup: async (username: string, password: string, name?: string, email?: string) => {
     const r = await req<AuthResponse>('/api/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ username, password, name }),
+      body: JSON.stringify({ username, password, name, email }),
     });
     setToken(r.token);
     return r;

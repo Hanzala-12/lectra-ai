@@ -28,6 +28,7 @@ class SignupRequest(BaseModel):
     username: str
     password: str
     name: Optional[str] = None
+    email: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -61,7 +62,7 @@ def get_optional_student(authorization: Optional[str] = Header(None)) -> Optiona
 async def signup(body: SignupRequest):
     repo = get_repository()
     try:
-        record = repo.create(body.username, body.password, body.name)
+        record = repo.create(body.username, body.password, body.name, body.email)
     except UsernameTakenError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:

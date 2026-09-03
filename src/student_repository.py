@@ -44,7 +44,11 @@ class StudentRepository:
                 json.dump(record, f, ensure_ascii=False, indent=2)
 
     def create(
-        self, username: str, password: str, name: Optional[str] = None
+        self,
+        username: str,
+        password: str,
+        name: Optional[str] = None,
+        email: Optional[str] = None,
     ) -> Dict[str, Any]:
         username = (username or "").strip()
         if not username or not password:
@@ -57,6 +61,8 @@ class StudentRepository:
             "id": student_id,
             "username": username,
             "name": name or username,
+            # ERD's Student.email — optional, login is by username per explicit request
+            "email": (email or "").strip() or None,
             "password_hash": hash_password(password),
             "created_at": time.time(),
         }
@@ -110,6 +116,7 @@ class StudentRepository:
             "id": record["id"],
             "username": record["username"],
             "name": record.get("name", record["username"]),
+            "email": record.get("email"),
             "created_at": record.get("created_at"),
         }
 

@@ -152,3 +152,26 @@ def test_password_hash_is_salted_differently_each_time():
     (per-user random salt) — otherwise identical passwords would be
     detectable by comparing hashes."""
     assert hash_password("same-password") != hash_password("same-password")
+
+
+# ----------------------------------------------------------------- email field
+
+
+def test_signup_stores_and_returns_email():
+    r = client.post(
+        "/api/auth/signup",
+        json={
+            "username": "jack",
+            "password": "sparrow123",
+            "email": "jack@example.com",
+        },
+    )
+    assert r.json()["student"]["email"] == "jack@example.com"
+
+
+def test_signup_email_is_optional():
+    r = client.post(
+        "/api/auth/signup", json={"username": "kim", "password": "possible1"}
+    )
+    assert r.status_code == 200
+    assert r.json()["student"]["email"] is None

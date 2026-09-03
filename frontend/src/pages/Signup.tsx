@@ -1,5 +1,5 @@
 import React, { useState, MouseEvent } from 'react';
-import { Lock, User, AtSign, ArrowRight, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { Lock, User, AtSign, Mail, ArrowRight, Sparkles, Loader2, AlertCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
@@ -7,6 +7,7 @@ export function Signup() {
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,7 +49,7 @@ export function Signup() {
     setLoading(true);
     setError('');
     try {
-      await api.signup(username.trim(), password, name.trim() || undefined);
+      await api.signup(username.trim(), password, name.trim() || undefined, email.trim() || undefined);
       navigate('/app/dashboard');
     } catch (err: any) {
       setError(err.message || 'Sign up failed');
@@ -114,6 +115,23 @@ export function Signup() {
                         autoComplete="name"
                         className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                         placeholder="John Doe"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-muted ml-1">Email <span className="text-muted/60 font-normal">(optional)</span></label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
+                        <Mail className="w-5 h-5" />
+                      </div>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        autoComplete="email"
+                        className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
+                        placeholder="john@nuces.edu.pk"
                       />
                     </div>
                   </div>
