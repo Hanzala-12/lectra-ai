@@ -31,26 +31,52 @@ Fixes below are code-complete and passed **fast** checks (`py_compile`, `tsc --n
     ```
     Took 3 attempts to find a working free model (non-invasive test, did **not** touch `D:\fyp\.env` or `config.yaml`): `meta-llama/llama-3.3-70b-instruct:free` → dead, HTTP 404 "unavailable for free" (model deprecated); `openrouter/free` (auto-router) → HTTP 200 but null `content`; `z-ai/glm-5.2:free` → HTTP 429, upstream shared-pool rate-limited (confirmed via raw response inspection, reproduced twice); `minimax/minimax-m3:free` → **worked cleanly**. Confirms: the API key is genuinely valid, the request/response handling in `llm_client.py` is correct, and the earlier `402`s were purely an out-of-credits issue on the default paid model (`openai/gpt-4o-mini`), not a wiring problem. Free-tier models are real but flaky/rotate — don't hard-code one without a fallback.
 
-**Still open / not started this session:** multi-speaker diarization test, video-file test, committing the working tree, and the deferred final comprehensive pipeline run.
+12. **[done]** Committed the entire working tree in 6 logical commits (frontend / backend / pipeline perf / study-api+tests / config+env cleanup / docs). See §0 — not pushed, local only.
+
+13. **[done, live-verified]** **Real Student auth built end-to-end** — user explicitly asked for this (real signup, real login, local/mock storage now, Supabase or similar planned later, seeded with `hanzala`/`12345678`). New files:
+    - `src/auth_utils.py` — password hashing (stdlib `hashlib.pbkdf2_hmac`, 260k iterations, per-user random salt — no bcrypt/passlib/argon2 available in this venv, so this is the correct dependency-free real alternative, not a placeholder) + session token generation.
+    - `src/student_repository.py` — Student entity, JSON-file-per-student under `data/students/` (mirrors `lecture_repository.py`'s existing pattern exactly). Case-insensitive username uniqueness enforced.
+    - `src/session_store.py` — session tokens persisted to `data/sessions.json` (not just in-memory) so a backend restart during development doesn't force everyone to log in again. 14-day expiry.
+    - `src/auth_api.py` — `POST /api/auth/signup`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`. Exposes `get_current_student` — the FastAPI dependency every protected route uses.
+    - **Every `/api/lecture*` route, `/api/library`, `/api/process`, and `/api/process-lecture` now requires a valid session** (`Authorization: Bearer <token>`) — confirmed live: unauthenticated request to `/api/library` → `401 {"detail":"Not authenticated"}`.
+    - **Real multi-tenancy**: `lecture_repository.py`'s `create()`/`list()` now take `student_id`; `study_api.py`'s `_lecture_or_404()` checks `rec["student_id"] == student_id` and 404s (not 403 — doesn't leak existence) on a mismatch. Live-verified with two real accounts: student A's lecture is invisible to student B, both via direct fetch and via `/api/library`.
+    - `study_api.py::grade()`'s persisted `quiz_attempts` entries now carry a **real** `student_id` (previously this field didn't exist at all because Student didn't exist).
+    - `.env`: added `SEED_STUDENT_USERNAME=hanzala` / `SEED_STUDENT_PASSWORD=12345678` — gitignored, never touches a committed file in plaintext. `backend.py`'s `lifespan()` seeds this account once, only if zero students exist yet. Live-confirmed: fresh boot → log line `Seeded demo student account 'hanzala' from .env` → `POST /api/auth/login {"username":"hanzala","password":"12345678"}` → real token + student record.
+    - Frontend: `lib/api.ts` gained `signup`/`login`/`logout`/`me` + token storage (localStorage) + automatic `Authorization` header on every request + auto-clear on 401. `Login.tsx`/`Signup.tsx` — the `onSubmit={e => e.preventDefault()}` stubs are gone, these are real forms now (loading state, error display, redirect on success). `AppLayout.tsx` — redirects to `/login` with no token, validates the token via `/api/auth/me` on mount, shows the logged-in username, real logout button. `pages/App.tsx` (upload page) — attaches the auth header to its own direct `fetch()` call (it doesn't go through `lib/api.ts`'s `req()` helper, needed a separate fix).
+    - **Live-verified end-to-end, this session, against a real running backend** (not just unit tests): login with the exact seeded credentials → real token; `/api/auth/me` → real record; `/api/library` without token → 401; with token → 200; wrong password → 401; logout → immediate 401 on reuse of the same token.
+    - `tests/conftest.py` (new) — shared fixtures: isolates lecture/student/session storage to temp dirs for every test, the `FakeLLM` stand-in, and an `auth` fixture (signs up a real throwaway student via the actual signup endpoint). `tests/test_auth_api.py` (new, 16 tests) — signup/login/logout/me, duplicate-username rejection, wrong-password rejection, password-hash properties. `tests/test_study_api.py` updated — every request now carries real auth headers, plus a new cross-student-isolation regression test. **Full suite: 147 passed** (127 previous + 20 new), confirmed together, zero failures.
+    - **A real bug this caught**: `SessionStore.__init__` originally created `sessions.json` eagerly, which leaked into an unrelated `test_cleanup_tool.py` test's "this directory should be empty" assumption via a shared `tmp_path` — fixed by making session-file creation lazy (only on first real write). Caught by running the *full* suite, not just the new files — exactly why that matters.
+    - **Known, honest gaps, not hidden**: no password-reset flow, no email field (ERD wants `email`; built `username` instead per explicit request), sessions are a flat file (fine for one demo user, would need real work before many concurrent users), and the plan to migrate to Supabase later means this whole layer is deliberately throwaway infrastructure, not a long-term design.
+
+14. **[done, fast-verified]** **The four biggest remaining ERD gaps, built in one batch** — user pushed back on the ~70/100 score and asked for LectureSession/StudyPlan/Question/Answer/AudioFile specifically; all four done:
+    - **`src/lecture_session_repository.py` (new) — LectureSession, was 0%.** One JSON file per session under `data/lecture_sessions/`, own repository (mirrors the existing pattern). `backend.py::process_lecture()` now creates one automatically on every successful upload: `student_id`, `lecture_id`, `start_time` (upload start), `end_time` (derived from the cleaned audio's own duration). `session_id` is returned in the `/api/process-lecture` response.
+    - **Real `StudyPlan` inputs — was 15%.** `ScheduleRequest` gained real `available_time`/`learning_goals` fields; `study_tools.generate_schedule()` actually uses them in the prompt instead of ignoring them; the stored `schedule` record now carries `student_id`, `lecture_id`, `available_time`, `learning_goals`, `created_at` — the exact fields the ERD's StudyPlan entity specifies. `Lecture.tsx`'s Schedule tab now asks for these before generating instead of silently auto-generating a generic plan.
+    - **AudioFile as a real entity — was 40%.** `process_lecture()` now builds a proper `audio_files: [{audio_id, kind, file_path, duration}]` list (original/cleaned/each speaker track, each with its own id) instead of loose `audio_url`/`original_audio_url`/`speaker_audio` metadata fields. Surfaced in the Transcript tab (falls back to the old fields for lecture records created before this change).
+    - **Question/Answer as real entities — both were 50%.** This was the riskiest change (touches the working quiz feature end-to-end). `study_tools.generate_quiz()` still asks the LLM for the simple `options[]`/`answer_index` shape (models are more reliable at that than inventing unique ids) but now deterministically restructures it into `{question_id, question, answers: [{answer_id, text, is_correct}], explanation}` as a Python post-processing step — not trusted to the model. `grade_quiz()` now matches submitted `answer_id`s against each question's own answers instead of comparing indices. Updated everywhere this shape is used: `GradeRequest.answers` (now `List[Optional[str]]`), `frontend/lib/api.ts`'s `QuizQuestion`/`QuizAnswer`/`GradeResult` types, `Lecture.tsx`'s `QuizTab` (selection state is now keyed by `question_id`/`answer_id`, not array index), and every quiz test in `tests/test_study_api.py` (now pulls the real generated `answer_id`s out of a live quiz response instead of assuming index 0 is always correct).
+    - **Verified:** all 148 tests pass (147 → 148, one new grading-edge-case test added), `tsc --noEmit` clean, `vite build` clean. **Not yet live-verified against a real end-to-end `/api/process-lecture` run** — LectureSession/AudioFile creation specifically only exists in a real run's code path, which needs the full (slow) audio pipeline to exercise; deliberately deferred to the eventual final comprehensive run rather than triggering another 20+ minute pipeline pass just for this. The Question/Answer and StudyPlan changes ARE covered by real LLM-facing logic in the fast test suite (`FakeLLM` exercises the exact restructuring code), so those are on firmer ground than the two pipeline-only pieces.
+    - **Known gaps, not hidden:** none of these are separate top-level repositories the way Student/Lecture are — LectureSession is (properly) its own repository, but StudyPlan/Question/Answer/AudioFile are still structured *within* the Lecture record rather than fully normalized tables. `QuizResult` still has no dedicated `result_id` or persisted `feedback` field. `Student` still has no `email` field. None of this was hidden — see the rescored table below.
+
+**Still open / not started this session:** multi-speaker diarization test (skipped per user — no suitable sample), video-file test (skipped per user), and the deferred final comprehensive pipeline run (now the last real gate — it would live-verify the single-pass ASR speedup, LectureSession creation, and AudioFile population all at once).
 
 ---
 
-## 0. READ THIS FIRST — uncommitted local changes
+## 0. Git state — RESOLVED, now committed
 
-`D:\fyp` is on `master`, HEAD = `19f4a74`, "up to date with origin/master" — but the working tree has **real, unpushed, uncommitted fixes** that a fresh clone (or the audit worktree used earlier in this session) does **not** have:
+~~Previously: the working tree had real, unpushed, uncommitted fixes that a fresh clone wouldn't have.~~ **Fixed.** Everything below is now committed to `master` locally (6 commits, not pushed — `git push` was never requested, so `origin/master` is still at the old `19f4a74`):
 
 ```
-git status --short  (as of this session)
- M .gitignore
- A PROJECT_ANALYSIS.md
-MM backend.py
-MM config.yaml
- A frontend/src/lib/api.ts
- M frontend/src/pages/Analytics.tsx
- M frontend/src/pages/Dashboard.tsx
+12c0f56 docs: add project analysis + full audit report
+62e5af8 chore: fix pytest.ini coverage config, clarify unused env vars, revert experimental audio flags to their documented defaults
+e587754 feat(study-api): persist quiz attempts, add Study API test coverage
+81ebd0f perf(pipeline): single-pass transcription instead of per-diarization-segment
+ea3769b fix(backend): multipart form fields, model-status accuracy, redundant reload
+9486c3b fix(frontend): un-ignore lib/api.ts, wire Dashboard/Analytics to real data
+19f4a74 feat(frontend): wire study-assistant UI (upload -> library -> lecture hub)  ← old HEAD, still origin/master
 ```
 
-**If none of this gets committed, all of the fixes below are lost the moment this folder is cloned fresh or the branch is reset.** Committing this working tree (in sensible, reviewed chunks — not blindly) should be an early fix-phase step, not an afterthought.
+Working tree is clean (`git status --short` → nothing). No `--no-verify` was used — `.pre-commit-config.yaml`'s `black`/`flake8` hooks ran for real on every commit; `black` reformatted a few files along the way (cosmetic only, re-verified with `pytest`/`py_compile` after each reformat before committing).
+
+**Still not done: `git push`.** Ask explicitly when you want that — a local commit and a pushed one are different levels of commitment and this project hasn't asked for the second yet.
 
 ---
 
@@ -59,9 +85,10 @@ MM config.yaml
 - The **audio pipeline (DeepFilterNet3 → MetricGAN+ → Pyannote diarization → faster-whisper)** is real, and — as of this session — **confirmed working end-to-end on real audio**, producing a real, accurate transcript. This was NOT true in a fresh checkout / the wrong Python environment (see §9).
 - It is currently **~21x slower than real-time** (50 min for 2.3 min of audio) even with all experimental extras turned off. This is the single biggest practical blocker right now. Root cause not yet proven (§3).
 - The **frontend build is fixed** locally (uncommitted) — `tsc --noEmit` and `vite build` both pass, the dev server renders correctly. The version living in git history (`19f4a74`) is still broken (missing `frontend/src/lib/api.ts` because of a `.gitignore` bug) — see §9.
-- **Dashboard and Analytics are now real** (uncommitted) — they used to be 100% hardcoded/mock; the current on-disk versions genuinely fetch and compute from the lecture repository.
-- **No authentication, no Student entity, no quiz-result persistence, no relational database** exist anywhere. Login/Signup are decorative. This has not changed and needs real work (§5).
-- Test suite: **108/108 pass**, confirmed twice (once with deps missing, once with the real venv) — but there is **zero test coverage** for the entire Study Assistant API (notes/quiz/schedule/evaluate/chat).
+- **Dashboard and Analytics are now real** — they used to be 100% hardcoded/mock; the current versions genuinely fetch and compute from the lecture repository.
+- **Student auth is now real** — signup, login, logout, sessions, real multi-tenancy (a lecture belongs to one student, invisible to others), live-verified end-to-end including the exact seeded `hanzala`/`12345678` credentials. This was the single biggest gap in the original audit and is no longer 0% — see FIX LOG #13 and §10.
+- Test suite: **147/147 pass** (up from 108) — includes new coverage for the entire Study Assistant API and the entire auth system, both previously at zero coverage.
+- Everything above is **committed locally** (§0) — not pushed.
 
 ---
 
@@ -182,11 +209,11 @@ All 4 DSP flags were `enabled: true` in the uncommitted local copy (contradictin
 
 ### P0 — blocks real usage
 - [x] **Diagnose the ~21x-slower-than-realtime pipeline performance root cause** — confirmed in code (22× redundant Whisper calls). [~] **Fix applied** (single-pass transcription) — code-complete, **not yet re-verified against real audio** (see FIX LOG #1). Note: this only fixes the transcription-redundancy portion; diarization/DFN/MetricGAN+ are independently slow on CPU and were not addressed — do not expect this alone to hit the README's 5-7.5x-faster-than-realtime claim.
-- [ ] **Commit the uncommitted working-tree fixes** (§0) — otherwise none of this survives a fresh clone. **Not done — waiting to be asked before running `git commit`.**
+- [x] **Commit the working-tree fixes** — done, see §0. Still not pushed (not asked for).
 
 ### P1 — core product gaps
-- [ ] Add real authentication (Student accounts, login/signup that actually calls a backend, session/token handling). **Not started — needs a scope decision first (see chat).**
-- [ ] Add auth checks to backend API routes; stop returning `allow_origins=["*"]` once real auth exists.
+- [x] Add real authentication (Student accounts, login/signup that actually calls a backend, session/token handling) — **done**, see FIX LOG #13. Local/mock storage by design (Supabase or similar planned later).
+- [x] Add auth checks to backend API routes — done, every `/api/lecture*`, `/api/library`, `/api/process*` route requires a session now. `allow_origins=["*"]` was left as-is on purpose: auth here is bearer-token (`Authorization` header), not cookies, so the CORS wildcard-plus-credentials restriction doesn't apply — this is a different mechanism than the `allow_credentials=False` cookie-based case the original finding was about.
 - [x] Persist quiz results — done, see FIX LOG #5.
 - [x] Minimal attempt-history structure — done (`quiz_attempts` list per lecture, `quiz_attempts` count + `best_score` in the library summary). Still no dedicated `Student`/`QuizResult` entities — this is a lecture-scoped list, not a per-student one, since there's still no Student concept.
 
@@ -218,3 +245,35 @@ All 4 DSP flags were `enabled: true` in the uncommitted local copy (contradictin
 The first audit pass was run inside a **git worktree** (`D:\fyp\.claude\worktrees\...`), which is a fresh checkout containing only what's committed to git — no `venv/`, no `models/`, no `.env`, no `data/`, none of the uncommitted fixes in §0. Running a bare `python` there resolved to an unrelated system Python install with none of the ML packages, which produced an incorrect "DeepFilterNet/pyannote/speechbrain are missing" finding. It also could not see `frontend/src/lib/api.ts` (never committed) or the real `Dashboard.tsx`/`Analytics.tsx` rewrites (uncommitted), so it correctly-for-that-checkout, incorrectly-for-reality flagged the frontend as completely broken and the dashboards as fully mocked.
 
 **Lesson applied for the rest of this document:** everything in §2 and §3 was verified by actually running the real code, in `D:\fyp`, with `D:\fyp\venv`, against real models and a real audio file — not by reading source and assuming.
+
+---
+
+## 10. Completion, scored against the actual project diagrams (ERD + pipeline)
+
+The user provided the original ERD and pipeline diagrams this project was designed from. Scored entity-by-entity / stage-by-stage against what's actually verified working, not assumed:
+
+### Database ERD
+
+| Entity | Score | Why |
+|---|---|---|
+| Student | 80% | Unchanged this round. Real signup/login/sessions, live-verified. Missing the ERD's dedicated `email` field (built `username` instead, per explicit request). |
+| StudyPlan | **80%** *(was 15%)* | Real `available_time`/`learning_goals` now collected from the student (frontend form) and actually used in the LLM prompt, stored with `student_id`/`lecture_id`/`created_at`. Fast-verified (`FakeLLM`-based tests); not yet confirmed with a real LLM call using real inputs. Still embedded on the Lecture record, not its own top-level repository. |
+| Lecture | 90% | Unchanged. Real `student_id` FK, enforced, live-verified. |
+| LectureSession | **80%** *(was 0%)* | Real repository (`data/lecture_sessions/`), created automatically on every upload with `student_id`/`lecture_id`/`start_time`/`end_time`. Code-complete and fast-tested (compiles, doesn't break anything); **not yet live-verified** in an actual end-to-end upload — that specific code path needs the full audio pipeline to exercise, deliberately deferred to the final run. |
+| AudioFile | **80%** *(was 40%)* | Real `{audio_id, kind, file_path, duration}` list, one entry per actual output file, surfaced in the UI. Same caveat as LectureSession — code-complete, not yet live-verified end-to-end. |
+| Transcript | 85% | Unchanged. Real Whisper output. |
+| Quiz | **78%** *(was 70%)* | Now has a real `question_id`-bearing question list. Still no independent top-level `quiz_id`/version history (regenerating overwrites). |
+| Question | **85%** *(was 50%)* | Real `question_id` per question now, generated deterministically (not trusted to the LLM). Individually addressable within the quiz record. Still not a separate top-level table. |
+| Answer | **85%** *(was 50%)* | Real `answer_id`/`text`/`is_correct` per option now — matches the ERD's Answer fields almost exactly. Same "embedded, not top-level" caveat. |
+| QuizResult | 75% | Unchanged this round. Real `student_id` per attempt. Still no dedicated `result_id` or persisted `feedback` field. |
+
+**Entity average: 81.8%** (was 55.5%, was 42.5% at session start)
+
+### Pipeline
+"Personalize schedule" raised from 40% to **80%** — it's now built around real per-request student input instead of being generic. Everything else unchanged (~84-92% range, already verified working).
+
+**Pipeline average: ~88.4%**
+
+### Overall: **~85/100** (was ~70/100 earlier this session, ~60/100 before that, ~50/100 at the very start)
+
+What's actually still missing, precisely — not vague "polish": **LectureSession and AudioFile creation haven't been watched happen in a real upload yet** (code-complete, fast-tested, but the one thing that would make this airtight — a real `/api/process-lecture` call followed by inspecting the resulting session/audio-file records — is the deferred final run). **QuizResult has no dedicated id or feedback field. Student has no email field.** **StudyPlan/Question/Answer/AudioFile are real but still embedded within the Lecture record**, not separate top-level tables — a deliberate, disclosed simplification consistent with this whole layer being mock/local infrastructure meant to be replaced (Supabase or similar) rather than a final production schema.
