@@ -44,12 +44,30 @@ def test_models_endpoint():
     assert len(data["whisper_models"]) > 0
 
 
-def test_invalid_file_type():
-    """Test uploading invalid file type"""
+def test_process_requires_auth():
+    """/api/process now requires a logged-in student"""
     response = client.post(
         "/api/process",
         files={"file": ("test.txt", b"not an audio file", "text/plain")},
         data={"whisper_model": "base"},
+    )
+    assert response.status_code == 401
+
+
+def test_invalid_file_type():
+    """Test uploading invalid file type (logged in — the 401 case is covered
+    by test_process_requires_auth above)."""
+    signup = client.post(
+        "/api/auth/signup",
+        json={"username": "filetype_tester", "password": "testpass123"},
+    )
+    headers = {"Authorization": f"Bearer {signup.json()['token']}"}
+
+    response = client.post(
+        "/api/process",
+        files={"file": ("test.txt", b"not an audio file", "text/plain")},
+        data={"whisper_model": "base"},
+        headers=headers,
     )
     assert response.status_code == 400
 
