@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, UploadCloud, HelpCircle, NotebookPen, Loader2, Trash2, Mic, Clock } from 'lucide-react';
+import { Search, UploadCloud, Loader2, Trash2, Mic } from 'lucide-react';
 import { api, type LectureSummary } from '../lib/api';
 
 function formatDuration(seconds?: number) {
@@ -8,16 +8,6 @@ function formatDuration(seconds?: number) {
   const mins = Math.max(1, Math.round(seconds / 60));
   return `${mins}m`;
 }
-
-// Rotating icon-badge tones per card — small, deliberate color variety
-// (like colored project tags in Linear/Notion-style tools) instead of every
-// card using the exact same single tint.
-const CARD_TONES = [
-  { badge: 'bg-primary-light text-primary', bar: 'from-primary to-primary-dark' },
-  { badge: 'bg-accent-light text-accent', bar: 'from-accent to-accent2' },
-  { badge: 'bg-success-light text-success', bar: 'from-success to-emerald-600' },
-  { badge: 'bg-warning-light text-warning', bar: 'from-warning to-orange-600' },
-];
 
 export function Library() {
   const [lectures, setLectures] = useState<LectureSummary[]>([]);
@@ -41,24 +31,24 @@ export function Library() {
   const filtered = lectures.filter((l) => l.title.toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10 md:pl-2">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-text">Lecture Library</h1>
-          <p className="text-sm text-muted mt-1">{lectures.length} lecture{lectures.length === 1 ? '' : 's'} in your workspace</p>
+          <h1 className="font-serif text-4xl font-semibold tracking-tight text-text mb-2">Lecture library</h1>
+          <p className="text-sm text-muted">{lectures.length} lecture{lectures.length === 1 ? '' : 's'} in your workspace</p>
         </div>
         <Link
           to="/app/upload"
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft hover:bg-primary-dark hover:shadow-soft-lg transition-all shrink-0"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark transition-colors shrink-0"
         >
           <UploadCloud className="w-4 h-4" /> Upload new
         </Link>
       </div>
 
-      <div className="relative mb-8">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted w-4 h-4" />
+      <div className="relative mb-9 max-w-sm">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted w-4 h-4" />
         <input value={q} onChange={(e) => setQ(e.target.value)} type="text" placeholder="Search lectures…"
-          className="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-surface focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none shadow-soft transition-all" />
+          className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-surface focus:border-primary outline-none transition-colors text-sm" />
       </div>
 
       {loading ? (
@@ -70,64 +60,46 @@ export function Library() {
           <p className="text-muted">No lectures match "{q}".</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border2 bg-surface p-12 text-center shadow-soft">
-          <div className="w-16 h-16 rounded-2xl bg-primary-light flex items-center justify-center mx-auto mb-5">
-            <Mic className="w-7 h-7 text-primary" />
+        <div className="rounded-lg border border-dashed border-border2 bg-surface p-12 text-center">
+          <div className="w-14 h-14 rounded-full bg-primary-light flex items-center justify-center mx-auto mb-5">
+            <Mic className="w-6 h-6 text-primary" />
           </div>
           <p className="text-muted mb-5">No lectures yet. Upload one to get started.</p>
-          <Link to="/app/upload" className="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl font-semibold inline-flex items-center gap-2 shadow-soft">
+          <Link to="/app/upload" className="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-lg font-semibold inline-flex items-center gap-2">
             <UploadCloud className="w-4 h-4" /> Upload a lecture
           </Link>
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((l, i) => {
-            const tone = CARD_TONES[i % CARD_TONES.length];
-            return (
+          {filtered.map((l) => (
             <Link key={l.id} to={`/app/lecture/${l.id}`}
-              className="group rounded-2xl border border-border bg-surface overflow-hidden hover:border-primary/30 hover:shadow-soft-lg hover:-translate-y-0.5 transition-all relative shadow-soft flex flex-col">
-              <div className={`h-1 bg-gradient-to-r ${tone.bar}`} />
-              <div className="p-5 flex flex-col flex-1">
-              <div className="flex items-start justify-between mb-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tone.badge}`}>
-                  <Mic className="w-5 h-5" />
-                </div>
-                <button onClick={(e) => remove(l.id, e)} title="Delete"
-                  className="text-muted hover:text-error opacity-0 group-hover:opacity-100 transition p-1.5 -m-1.5 rounded-lg hover:bg-error-light">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-              <h3 className="font-semibold text-text mb-1.5 line-clamp-2 flex-1">{l.title}</h3>
-              <p className="text-xs text-muted mb-4 flex items-center gap-1.5 flex-wrap">
-                {formatDuration(l.duration) && (
-                  <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(l.duration)}</span>
-                )}
-                <span>· {l.word_count} words</span>
-                <span>· {new Date((l.created_at || 0) * 1000).toLocaleDateString()}</span>
+              className="group rounded-lg bg-surface p-5 hover:bg-primary-light/40 transition-colors relative flex flex-col">
+              <button onClick={(e) => remove(l.id, e)} title="Delete"
+                className="absolute top-4 right-4 text-muted hover:text-error opacity-0 group-hover:opacity-100 transition p-1 rounded">
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <p className="label-caps text-primary mb-2 pr-6">
+                {formatDuration(l.duration) ? `${formatDuration(l.duration)} audio` : 'Lecture'}
+              </p>
+              <h3 className="font-serif font-semibold text-lg text-text mb-2 line-clamp-2 flex-1 pr-2">{l.title}</h3>
+              <p className="text-xs text-muted mb-4">
+                {l.word_count.toLocaleString()} words · {new Date((l.created_at || 0) * 1000).toLocaleDateString()}
               </p>
               <div className="flex flex-wrap gap-1.5">
-                <Badge on={l.has_notes} icon={<NotebookPen className="w-3 h-3" />} label="Notes" />
-                <Badge on={l.has_quiz} icon={<HelpCircle className="w-3 h-3" />} label="Quiz" />
-                {l.best_score != null && (
-                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-success-light text-success font-medium">
-                    Best {Math.round(l.best_score)}%
-                  </span>
-                )}
-              </div>
+                <Badge on={l.has_notes} label="Notes" tone="accent" />
+                <Badge on={l.has_quiz} label="Quiz" tone="primary" />
+                {l.best_score != null && <Badge on label={`Best ${Math.round(l.best_score)}%`} tone="accent" />}
               </div>
             </Link>
-            );
-          })}
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function Badge({ on, icon, label }: { on: boolean; icon: ReactNode; label: string }) {
-  return (
-    <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium ${on ? 'text-primary bg-primary-light' : 'text-muted bg-surface2'}`}>
-      {icon} {label}
-    </span>
-  );
+function Badge({ on, label, tone }: { on: boolean; label: string; tone: 'primary' | 'accent' }) {
+  if (!on) return null;
+  const cls = tone === 'primary' ? 'bg-primary-light text-primary-dark' : 'bg-accent-light text-accent2';
+  return <span className={`inline-flex items-center text-[11px] px-2.5 py-1 rounded-full font-medium ${cls}`}>{label}</span>;
 }

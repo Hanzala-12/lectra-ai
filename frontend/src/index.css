@@ -1,111 +1,102 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Fraunces', Georgia, serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  /* Neutral surface scale — a soft, faintly cool off-white rather than a
-     stark #fafafa, so cards read as "raised" against the page instead of
-     everything sitting at the same flat plane. */
-  --color-bg: #f6f7fb;
-  --color-surface: #ffffff;
-  --color-surface2: #eef0f7;
-  --color-border: #e2e4ee;
-  --color-border2: #c9cce0;
-  --color-text: #14162b;
-  --color-muted: #6b6f8c;
+  /* Warm, flat, editorial neutrals — the page background and the sidebar
+     are the SAME tone; only content cards lift a shade lighter. Depth here
+     comes from typography and whitespace, not shadows/borders. */
+  --color-bg: #f0efec;
+  --color-surface: #f9f8f6;
+  --color-surface2: #e9e7e2;
+  --color-border: #ddd9d1;
+  --color-border2: #c9c4b8;
+  --color-text: #1a1a18;
+  --color-muted: #6f6b62;
 
-  /* One brand color drives every interactive/emphasis element — no more
-     competing pure-black "accent" fighting the blue primary for attention. */
-  --color-primary: #4338ca;
-  --color-primary-light: #eef0ff;
-  --color-primary-dark: #362da3;
+  /* Teal — the single brand color driving every interactive element. */
+  --color-primary: #0e7a90;
+  --color-primary-light: #dcedf0;
+  --color-primary-dark: #0b6377;
 
-  /* Secondary accent (violet) for variety in badges/status without
-     resorting to arbitrary rainbow colors per card. */
-  --color-accent: #7c3aed;
-  --color-accent-light: #f3ebff;
-  --color-accent2: #6425d0;
+  /* Magenta — the one deliberate second color, used sparingly (best-score
+     badges, one chart series) exactly like the reference, never diluted
+     into a rainbow of tones. */
+  --color-accent: #d1236f;
+  --color-accent-light: #fbe3ee;
+  --color-accent2: #a91b59;
 
-  --color-success: #15945c;
-  --color-success-light: #eafbf3;
+  --color-success: #12805a;
+  --color-success-light: #e0f3ea;
 
-  --color-error: #dc2626;
-  --color-error-light: #fef2f2;
+  --color-error: #b8352f;
+  --color-error-light: #fbe7e5;
 
-  --color-warning: #d97706;
-  --color-warning-light: #fffbeb;
+  --color-warning: #a8641a;
+  --color-warning-light: #f6ead9;
 
-  --shadow-soft: 0 1px 2px rgba(20, 22, 43, 0.04), 0 8px 24px -12px rgba(20, 22, 43, 0.10);
-  --shadow-soft-lg: 0 4px 12px rgba(20, 22, 43, 0.06), 0 16px 40px -16px rgba(20, 22, 43, 0.16);
-
-  /* The sidebar is deliberately NOT theme-aware — a permanently dark, rich
-     indigo chrome (like Linear/Notion/Spotify's nav chrome) is what actually
-     reads as "designed" rather than "clean template": it gives the shell
-     real contrast against the light content canvas instead of everything
-     sitting on one flat plane. Stays dark in both light and dark app theme. */
-  --color-sidebar: #14122b;
-  --color-sidebar2: #1c1a3a;
-  --color-sidebar-border: #2b2853;
-  --color-sidebar-text: #b8b4e0;
-  --color-sidebar-text-active: #ffffff;
-  --color-sidebar-muted: #716dab;
+  /* Deliberately faint — this design gets its depth from flat color shifts
+     (surface vs bg) and typography, not from shadow elevation. */
+  --shadow-soft: 0 1px 2px rgba(26, 26, 24, 0.03);
+  --shadow-soft-lg: 0 2px 6px rgba(26, 26, 24, 0.05);
 }
 
 :root[data-theme="dark"] {
-  --color-bg: #0d0e1a;
-  --color-surface: #15172a;
-  --color-surface2: #1c1f38;
-  --color-border: #292c4a;
-  --color-border2: #383c63;
-  --color-text: #eef0fb;
-  --color-muted: #9296bb;
+  --color-bg: #16151a;
+  --color-surface: #1d1c22;
+  --color-surface2: #26252c;
+  --color-border: #333139;
+  --color-border2: #46434e;
+  --color-text: #f3f1eb;
+  --color-muted: #9b978f;
 
-  --color-primary: #818cf8;
-  --color-primary-light: #23264a;
-  --color-primary-dark: #a5b0fb;
+  --color-primary: #4fb8cf;
+  --color-primary-light: #1c3238;
+  --color-primary-dark: #7cd0e2;
 
-  --color-accent: #c084fc;
-  --color-accent-light: #2a1f45;
-  --color-accent2: #d8b4fe;
+  --color-accent: #ee6ba8;
+  --color-accent-light: #35202c;
+  --color-accent2: #f491bf;
 
-  --color-success: #34d399;
-  --color-success-light: #0f2a20;
+  --color-success: #4ecb9a;
+  --color-success-light: #12281f;
 
-  --color-error: #f87171;
-  --color-error-light: #341414;
+  --color-error: #ea8079;
+  --color-error-light: #2e1917;
 
-  --color-warning: #fbbf24;
-  --color-warning-light: #332107;
+  --color-warning: #dba05a;
+  --color-warning-light: #2c2013;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-bg: #0d0e1a;
-    --color-surface: #15172a;
-    --color-surface2: #1c1f38;
-    --color-border: #292c4a;
-    --color-border2: #383c63;
-    --color-text: #eef0fb;
-    --color-muted: #9296bb;
+    --color-bg: #16151a;
+    --color-surface: #1d1c22;
+    --color-surface2: #26252c;
+    --color-border: #333139;
+    --color-border2: #46434e;
+    --color-text: #f3f1eb;
+    --color-muted: #9b978f;
 
-    --color-primary: #818cf8;
-    --color-primary-light: #23264a;
-    --color-primary-dark: #a5b0fb;
+    --color-primary: #4fb8cf;
+    --color-primary-light: #1c3238;
+    --color-primary-dark: #7cd0e2;
 
-    --color-accent: #c084fc;
-    --color-accent-light: #2a1f45;
-    --color-accent2: #d8b4fe;
+    --color-accent: #ee6ba8;
+    --color-accent-light: #35202c;
+    --color-accent2: #f491bf;
 
-    --color-success: #34d399;
-    --color-success-light: #0f2a20;
+    --color-success: #4ecb9a;
+    --color-success-light: #12281f;
 
-    --color-error: #f87171;
-    --color-error-light: #341414;
+    --color-error: #ea8079;
+    --color-error-light: #2e1917;
 
-    --color-warning: #fbbf24;
-    --color-warning-light: #332107;
+    --color-warning: #dba05a;
+    --color-warning-light: #2c2013;
   }
 }
 
@@ -119,13 +110,17 @@
   .hide-scrollbar::-webkit-scrollbar { display: none; }
   .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 
+  .font-serif { font-family: var(--font-serif); }
   .shadow-soft { box-shadow: var(--shadow-soft); }
   .shadow-soft-lg { box-shadow: var(--shadow-soft-lg); }
 
-  /* Subtle dot-grid texture for the app shell background — cheap way to add
-     depth without a heavy illustration/image asset. */
-  .bg-dot-grid {
-    background-image: radial-gradient(circle, var(--color-border2) 1px, transparent 1px);
-    background-size: 20px 20px;
+  /* The recurring "GOOD AFTERNOON, HANZALA" / "WORKSPACE" / "BIOLOGY 201"
+     treatment: small, tracked-out, colored uppercase labels used everywhere
+     as the editorial meta-text register. */
+  .label-caps {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 }

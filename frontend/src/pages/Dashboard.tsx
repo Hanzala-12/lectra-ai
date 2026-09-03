@@ -1,15 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Clock,
-  HelpCircle,
-  Library,
   Loader2,
-  NotebookPen,
-  Sparkles,
   UploadCloud,
 } from 'lucide-react';
 import { api, getToken, type LectureSummary, type Student } from '../lib/api';
@@ -35,11 +31,10 @@ function greeting() {
   return 'Good evening';
 }
 
-const heroLine = (lectureCount: number, completion: number) => {
+const heroLine = (lectureCount: number, ready: number) => {
   if (lectureCount === 0) return "Upload your first lecture and let's get you studying.";
-  if (completion >= 80) return "You're in great shape — your study material is fully prepped.";
-  if (completion >= 40) return 'Solid progress. A few more lectures could use notes or a quiz.';
-  return 'Plenty of lectures waiting on notes and quizzes — pick one up?';
+  if (ready === 0) return `${lectureCount} lecture${lectureCount === 1 ? '' : 's'} in your library — pick one up.`;
+  return `${ready} lecture${ready === 1 ? '' : 's'} still waiting on notes or a quiz.`;
 };
 
 export function Dashboard() {
@@ -64,12 +59,14 @@ export function Dashboard() {
     const analyzed = lectures.filter((l) => l.has_evaluation).length;
     const completedArtifacts = notes + quizzes + analyzed;
     const possibleArtifacts = Math.max(lectures.length * 3, 1);
+    const notReady = lectures.filter((l) => !(l.has_notes && l.has_quiz)).length;
     return {
       totalWords,
       totalMinutes,
       notes,
       quizzes,
       analyzed,
+      notReady,
       completion: Math.round((completedArtifacts / possibleArtifacts) * 100),
     };
   }, [lectures]);
@@ -84,8 +81,8 @@ export function Dashboard() {
 
   if (err) {
     return (
-      <div className="max-w-7xl mx-auto px-6 py-12 md:pl-2">
-        <div className="rounded-2xl border border-error/30 bg-error-light p-5 text-error">{err}</div>
+      <div className="max-w-6xl mx-auto px-10 py-12 md:pl-6">
+        <div className="rounded-lg border border-error/30 bg-error-light p-5 text-error">{err}</div>
       </div>
     );
   }
@@ -93,83 +90,75 @@ export function Dashboard() {
   const firstName = (student?.name || student?.username || '').split(' ')[0];
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 md:pl-2">
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-accent2 p-8 sm:p-10 mb-8 shadow-soft-lg">
-        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -bottom-20 left-1/3 w-72 h-72 rounded-full bg-accent/30 blur-3xl" />
-        <div className="relative">
-          <p className="text-sm font-medium text-white/80 mb-2">
-            {greeting()}{firstName ? `, ${firstName}` : ''} 👋
+    <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between mb-10">
+        <div>
+          <p className="label-caps text-primary mb-3">
+            {greeting()}{firstName ? `, ${firstName}` : ''}
           </p>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-3 max-w-xl">
-            {heroLine(lectures.length, stats.completion)}
+          <h1 className="font-serif text-4xl sm:text-[2.75rem] leading-[1.1] font-semibold tracking-tight text-text max-w-xl">
+            {heroLine(lectures.length, stats.notReady)}
           </h1>
-          <div className="flex flex-wrap items-center gap-3 mt-6">
-            <Link
-              to="/app/upload"
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-primary shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all"
-            >
-              <UploadCloud className="w-4 h-4" /> Upload lecture
+          <p className="text-muted mt-3 text-[15px]">Pick up where you left off, or bring in something new.</p>
+        </div>
+        <div className="flex items-center gap-5 shrink-0">
+          <Link
+            to="/app/upload"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark transition-colors"
+          >
+            <UploadCloud className="w-4 h-4" /> Upload lecture
+          </Link>
+          {lectures.length > 0 && (
+            <Link to="/app/library" className="text-sm font-medium text-primary hover:text-primary-dark inline-flex items-center gap-1 group">
+              Browse library <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
             </Link>
-            {lectures.length > 0 && (
-              <Link
-                to="/app/library"
-                className="inline-flex items-center gap-2 rounded-xl bg-white/15 backdrop-blur px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/25 transition-all"
-              >
-                <Library className="w-4 h-4" /> Browse library
-              </Link>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-        <Stat icon={<Library className="w-5 h-5" />} label="Lectures" value={lectures.length} tone="primary" />
-        <Stat icon={<NotebookPen className="w-5 h-5" />} label="Notes ready" value={stats.notes} tone="success" />
-        <Stat icon={<HelpCircle className="w-5 h-5" />} label="Quizzes ready" value={stats.quizzes} tone="accent" />
-        <Stat icon={<Sparkles className="w-5 h-5" />} label="Analyzed" value={stats.analyzed} tone="warning" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-12 pb-10 border-b border-border">
+        <Stat label="Lectures" value={lectures.length} />
+        <Stat label="Notes ready" value={stats.notes} />
+        <Stat label="Quizzes ready" value={stats.quizzes} />
+        <Stat label="Analyzed" value={stats.analyzed} />
       </div>
 
       {lectures.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border2 bg-surface p-12 text-center shadow-soft">
-          <div className="w-16 h-16 rounded-2xl bg-primary-light flex items-center justify-center mx-auto mb-5">
-            <UploadCloud className="w-7 h-7 text-primary" />
+        <div className="rounded-lg border border-dashed border-border2 bg-surface p-12 text-center">
+          <div className="w-14 h-14 rounded-full bg-primary-light flex items-center justify-center mx-auto mb-5">
+            <UploadCloud className="w-6 h-6 text-primary" />
           </div>
-          <h2 className="text-xl font-bold text-text mb-2">Upload your first lecture</h2>
+          <h2 className="font-serif text-xl font-semibold text-text mb-2">Upload your first lecture</h2>
           <p className="text-sm text-muted mb-6 max-w-sm mx-auto">
             Drop in a recording and Lectra will clean the audio, transcribe it, and get notes and a quiz ready for you.
           </p>
           <Link
             to="/app/upload"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-soft hover:bg-primary-dark"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-primary-dark"
           >
             <UploadCloud className="w-4 h-4" /> Upload a lecture
           </Link>
         </div>
       ) : (
-        <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-lg text-text">Recent lectures</h2>
+        <div className="grid lg:grid-cols-[1fr_320px] gap-14">
+          <div>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-serif text-2xl font-semibold text-text">Recent lectures</h2>
               <Link to="/app/library" className="text-sm font-medium text-primary hover:text-primary-dark inline-flex items-center gap-1 group">
                 View all <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
-            <div className="space-y-3">
+            <div className="divide-y divide-border">
               {lectures.slice(0, 5).map((lecture) => (
                 <Link
                   key={lecture.id}
                   to={`/app/lecture/${lecture.id}`}
-                  className="bg-surface border border-border rounded-2xl p-4 flex items-center gap-4 shadow-soft hover:shadow-soft-lg hover:border-primary/30 hover:-translate-y-0.5 transition-all"
+                  className="flex items-center justify-between gap-4 py-4 group"
                 >
-                  <div className="w-11 h-11 rounded-xl bg-primary-light flex items-center justify-center shrink-0">
-                    <NotebookPen className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-text truncate">{lecture.title}</h3>
-                    <p className="text-xs text-muted flex items-center gap-1.5 mt-0.5">
-                      <Clock className="w-3 h-3" /> {formatDuration(lecture.duration)} · {lecture.word_count} words · {formatDate(lecture.created_at)}
+                  <div className="min-w-0">
+                    <h3 className="font-serif font-semibold text-text truncate group-hover:text-primary transition-colors">{lecture.title}</h3>
+                    <p className="text-xs text-muted flex items-center gap-1.5 mt-1">
+                      <Clock className="w-3 h-3" /> {formatDuration(lecture.duration)} · {lecture.word_count.toLocaleString()} words · {formatDate(lecture.created_at)}
                     </p>
                   </div>
                   <ArtifactBadges lecture={lecture} />
@@ -179,36 +168,30 @@ export function Dashboard() {
           </div>
 
           <div>
-            <h2 className="font-bold text-lg text-text mb-4">Study readiness</h2>
-            <div className="bg-surface border border-border rounded-2xl p-6 shadow-soft">
-              <div className="relative w-28 h-28 mx-auto mb-5">
+            <h2 className="font-serif text-2xl font-semibold text-text mb-5">Study readiness</h2>
+            <div className="bg-surface rounded-lg p-6">
+              <div className="relative w-32 h-32 mx-auto mb-6">
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-surface2)" strokeWidth="10" />
+                  <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-surface2)" strokeWidth="9" />
                   <circle
-                    cx="50" cy="50" r="42" fill="none" stroke="url(#readinessGradient)" strokeWidth="10"
-                    strokeLinecap="round" strokeDasharray={`${stats.completion * 2.64} 264`}
+                    cx="50" cy="50" r="42" fill="none" stroke="var(--color-primary)" strokeWidth="9"
+                    strokeDasharray={`${stats.completion * 2.64} 264`}
                     className="transition-all duration-700"
                   />
-                  <defs>
-                    <linearGradient id="readinessGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="var(--color-primary)" />
-                      <stop offset="100%" stopColor="var(--color-accent)" />
-                    </linearGradient>
-                  </defs>
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold text-text">{stats.completion}%</span>
+                  <span className="font-serif text-3xl font-semibold text-text">{stats.completion}%</span>
                 </div>
               </div>
-              <div className="space-y-2.5 text-sm mb-5">
-                <ReadinessRow ok={stats.notes > 0} text={`${stats.notes} lecture${stats.notes === 1 ? '' : 's'} with notes`} />
-                <ReadinessRow ok={stats.quizzes > 0} text={`${stats.quizzes} lecture${stats.quizzes === 1 ? '' : 's'} with quizzes`} />
-                <ReadinessRow ok={stats.analyzed > 0} text={`${stats.analyzed} lecture${stats.analyzed === 1 ? '' : 's'} analyzed`} />
+              <div className="space-y-2.5 text-sm mb-6">
+                <ReadinessRow ok={stats.notes > 0} text={`${stats.notes} of ${lectures.length} lectures have notes`} />
+                <ReadinessRow ok={stats.quizzes > 0} text={`${stats.quizzes} of ${lectures.length} lectures have quizzes`} />
+                <ReadinessRow ok={stats.analyzed > 0} text={`${stats.analyzed} of ${lectures.length} lectures analyzed`} />
               </div>
-              <div className="rounded-xl bg-gradient-to-br from-primary-light to-accent-light p-4 text-sm text-text">
-                <span className="font-bold">{stats.totalWords.toLocaleString()}</span> words across{' '}
-                <span className="font-bold">{stats.totalMinutes}</span> recorded minutes.
-              </div>
+              <p className="text-sm text-muted pt-5 border-t border-border">
+                <span className="font-semibold text-text">{stats.totalWords.toLocaleString()}</span> words across{' '}
+                <span className="font-semibold text-text">{Math.floor(stats.totalMinutes / 60)}h {stats.totalMinutes % 60}m</span> recorded.
+              </p>
             </div>
           </div>
         </div>
@@ -217,19 +200,11 @@ export function Dashboard() {
   );
 }
 
-const TONE_CLASSES: Record<string, string> = {
-  primary: 'bg-primary-light text-primary',
-  success: 'bg-success-light text-success',
-  accent: 'bg-accent-light text-accent',
-  warning: 'bg-warning-light text-warning',
-};
-
-function Stat({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone: string }) {
+function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-surface border border-border rounded-2xl p-5 shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${TONE_CLASSES[tone]}`}>{icon}</div>
-      <div className="text-3xl font-bold tracking-tight text-text mb-1">{value}</div>
-      <div className="text-sm text-muted">{label}</div>
+    <div>
+      <p className="label-caps text-muted mb-2">{label}</p>
+      <p className="font-serif text-4xl font-semibold text-text">{value}</p>
     </div>
   );
 }
@@ -237,27 +212,27 @@ function Stat({ icon, label, value, tone }: { icon: ReactNode; label: string; va
 function ArtifactBadges({ lecture }: { lecture: LectureSummary }) {
   return (
     <div className="hidden sm:flex flex-wrap gap-1.5 shrink-0">
-      <MiniBadge on={lecture.has_notes} label="Notes" />
-      <MiniBadge on={lecture.has_quiz} label="Quiz" />
-      <MiniBadge on={lecture.has_evaluation} label="Analysis" />
+      <Badge on={lecture.has_notes} label="Notes" tone="accent" />
+      <Badge on={lecture.has_quiz} label="Quiz" tone="primary" />
+      {lecture.best_score != null && (
+        <span className="inline-flex items-center text-[11px] px-2.5 py-1 rounded-full bg-accent-light text-accent2 font-medium">
+          Best {Math.round(lecture.best_score)}%
+        </span>
+      )}
     </div>
   );
 }
 
-function MiniBadge({ on, label }: { on: boolean; label: string }) {
+function Badge({ on, label, tone }: { on: boolean; label: string; tone: 'primary' | 'accent' }) {
   if (!on) return null;
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-success-light text-success px-2.5 py-1 text-[11px] font-medium">
-      <CheckCircle2 className="w-3 h-3" />
-      {label}
-    </span>
-  );
+  const cls = tone === 'primary' ? 'bg-primary-light text-primary-dark' : 'bg-accent-light text-accent2';
+  return <span className={`inline-flex items-center text-[11px] px-2.5 py-1 rounded-full font-medium ${cls}`}>{label}</span>;
 }
 
 function ReadinessRow({ ok, text }: { ok: boolean; text: string }) {
   return (
     <div className="flex items-center gap-2.5">
-      {ok ? <CheckCircle2 className="w-4 h-4 text-success shrink-0" /> : <AlertTriangle className="w-4 h-4 text-muted shrink-0" />}
+      {ok ? <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> : <AlertTriangle className="w-4 h-4 text-muted shrink-0" />}
       <span className={ok ? 'text-text' : 'text-muted'}>{text}</span>
     </div>
   );

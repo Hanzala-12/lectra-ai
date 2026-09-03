@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BarChart2,
   CheckCircle2,
   Download,
   Loader2,
-  NotebookPen,
-  TrendingUp,
   XCircle,
 } from 'lucide-react';
 import { api, type Lecture, type LectureSummary } from '../lib/api';
@@ -87,17 +85,8 @@ export function Analytics() {
     ];
 
     return {
-      total,
-      notes,
-      quizzes,
-      schedules,
-      evaluations,
-      totalWords,
-      totalMinutes,
-      avgStudyMinutes,
-      avgDifficulty,
-      topics,
-      artifactBars,
+      total, notes, quizzes, schedules, evaluations, totalWords, totalMinutes,
+      avgStudyMinutes, avgDifficulty, topics, artifactBars,
     };
   }, [lectures]);
 
@@ -136,131 +125,125 @@ export function Analytics() {
 
   if (err) {
     return (
-      <div className="max-w-7xl mx-auto px-6 py-10 md:pl-2">
-        <div className="rounded-2xl border border-error/30 bg-error-light p-5 text-error">{err}</div>
+      <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
+        <div className="rounded-lg border border-error/30 bg-error-light p-5 text-error">{err}</div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10 md:pl-2">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
+    <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between mb-10">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-text">Learning analytics</h1>
-          <p className="text-muted mt-1 text-sm">Computed from saved lectures and generated study artifacts.</p>
+          <h1 className="font-serif text-4xl font-semibold tracking-tight text-text mb-2">Learning analytics</h1>
+          <p className="text-sm text-muted">Computed from saved lectures and generated study artifacts.</p>
         </div>
         <button
           onClick={exportReport}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-surface border border-border text-sm font-medium hover:bg-surface2 transition-colors shadow-soft"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-surface2 transition-colors shrink-0"
         >
           <Download className="w-4 h-4" /> Export report
         </button>
       </div>
 
       {analytics.total === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border2 bg-surface p-12 text-center shadow-soft">
-          <div className="w-16 h-16 rounded-2xl bg-primary-light flex items-center justify-center mx-auto mb-5">
-            <BarChart2 className="w-7 h-7 text-primary" />
+        <div className="rounded-lg border border-dashed border-border2 bg-surface p-12 text-center">
+          <div className="w-14 h-14 rounded-full bg-primary-light flex items-center justify-center mx-auto mb-5">
+            <BarChart2 className="w-6 h-6 text-primary" />
           </div>
-          <h2 className="text-xl font-bold text-text mb-2">No analytics yet</h2>
+          <h2 className="font-serif text-xl font-semibold text-text mb-2">No analytics yet</h2>
           <p className="text-sm text-muted">Upload and process lectures to build your learning analytics.</p>
         </div>
       ) : (
         <>
-          <div className="grid sm:grid-cols-3 gap-5 mb-8">
-            <SummaryCard
-              title="Repository coverage"
-              value={`${pct(analytics.notes + analytics.quizzes + analytics.evaluations, analytics.total * 3)}%`}
-              subtitle={`${analytics.total} lectures tracked`}
-              icon={<TrendingUp className="w-5 h-5" />}
-              tone="primary"
-            />
-            <SummaryCard
-              title="Study load"
-              value={`${analytics.avgStudyMinutes || 0}m`}
-              subtitle="Average estimated study time"
-              icon={<NotebookPen className="w-5 h-5" />}
-              tone="accent"
-            />
-            <SummaryCard
-              title="Difficulty"
-              value={analytics.avgDifficulty >= 2.6 ? 'Hard' : analytics.avgDifficulty >= 1.6 ? 'Medium' : 'Easy'}
-              subtitle={`${analytics.evaluations} evaluated lectures`}
-              icon={<AlertTriangle className="w-5 h-5" />}
-              tone="warning"
-            />
+          <div className="grid grid-cols-3 gap-8 mb-12 pb-10 border-b border-border">
+            <div>
+              <p className="label-caps text-muted mb-2">Repository coverage</p>
+              <p className="font-serif text-4xl font-semibold text-text mb-1">{pct(analytics.notes + analytics.quizzes + analytics.evaluations, analytics.total * 3)}%</p>
+              <p className="text-sm text-muted">{analytics.total} lectures tracked</p>
+            </div>
+            <div>
+              <p className="label-caps text-muted mb-2">Study load</p>
+              <p className="font-serif text-4xl font-semibold text-text mb-1">{analytics.avgStudyMinutes || 0}m</p>
+              <p className="text-sm text-muted">Average estimated study time</p>
+            </div>
+            <div>
+              <p className="label-caps text-muted mb-2">Difficulty</p>
+              <p className="font-serif text-4xl font-semibold text-text mb-1">
+                {analytics.avgDifficulty >= 2.6 ? 'Hard' : analytics.avgDifficulty >= 1.6 ? 'Moderate' : 'Easy'}
+              </p>
+              <p className="text-sm text-muted">{analytics.evaluations} evaluated lectures</p>
+            </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-surface border border-border rounded-2xl p-6 shadow-soft">
-              <h3 className="font-bold text-lg text-text mb-5">Generated artifact coverage</h3>
-              <div className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-14 mb-12">
+            <div>
+              <h3 className="font-serif text-xl font-semibold text-text mb-6">Generated artifact coverage</h3>
+              <div className="space-y-5">
                 {analytics.artifactBars.map((bar) => (
-                  <div key={bar.label}>
-                    <div className="flex items-center justify-between mb-1.5 text-sm">
-                      <span className="font-medium text-text">{bar.label}</span>
-                      <span className="text-muted">{bar.count}/{analytics.total}</span>
-                    </div>
-                    <div className="h-2.5 rounded-full bg-surface2 overflow-hidden">
+                  <div key={bar.label} className="flex items-center gap-4">
+                    <span className="w-20 shrink-0 text-sm text-muted">{bar.label}</span>
+                    <div className="h-1.5 flex-1 rounded-full bg-surface2 overflow-hidden">
                       <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${bar.value}%` }} />
                     </div>
+                    <span className="w-10 text-right text-sm font-semibold text-text">{bar.value}%</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="bg-surface border border-border rounded-2xl p-6 shadow-soft">
-              <h3 className="font-bold text-lg text-text mb-5">Top evaluated topics</h3>
+            <div>
+              <h3 className="font-serif text-xl font-semibold text-text mb-6">Top evaluated topics</h3>
               {analytics.topics.length === 0 ? (
-                <div className="rounded-xl bg-warning-light p-4 text-sm text-text">
+                <div className="rounded-lg bg-warning-light p-4 text-sm text-text">
                   Generate lecture evaluations to populate topic analytics.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {analytics.topics.map((topic) => (
-                    <div key={topic.topic} className="flex items-center gap-3">
-                      <div className="w-32 shrink-0 truncate text-sm font-medium text-text">{topic.topic}</div>
-                      <div className="h-2.5 flex-1 rounded-full bg-surface2 overflow-hidden">
+                <div className="space-y-5">
+                  {analytics.topics.slice(0, 3).map((topic) => (
+                    <div key={topic.topic} className="flex items-center gap-4">
+                      <span className="w-36 shrink-0 truncate text-sm text-muted">{topic.topic}</span>
+                      <div className="h-1.5 flex-1 rounded-full bg-surface2 overflow-hidden">
                         <div
                           className="h-full bg-accent rounded-full transition-all duration-500"
                           style={{ width: `${pct(topic.count, analytics.topics[0]?.count || 1)}%` }}
                         />
                       </div>
-                      <span className="w-8 text-right text-xs text-muted">{topic.count}</span>
+                      <span className="w-10 text-right text-sm font-semibold text-text">{pct(topic.count, analytics.total)}%</span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+          </div>
 
-            <div className="bg-surface border border-border rounded-2xl p-6 shadow-soft md:col-span-2">
-              <h3 className="font-bold text-lg text-text mb-5">Lecture detail matrix</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-muted">
-                      <th className="py-3 pr-4 font-medium">Lecture</th>
-                      <th className="py-3 px-4 font-medium">Words</th>
-                      <th className="py-3 px-4 font-medium">Notes</th>
-                      <th className="py-3 px-4 font-medium">Quiz</th>
-                      <th className="py-3 px-4 font-medium">Schedule</th>
-                      <th className="py-3 px-4 font-medium">Evaluation</th>
+          <div>
+            <h3 className="font-serif text-xl font-semibold text-text mb-5">Lecture detail matrix</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="py-3 pr-4 label-caps text-muted font-semibold">Lecture</th>
+                    <th className="py-3 px-4 label-caps text-muted font-semibold">Words</th>
+                    <th className="py-3 px-4 label-caps text-muted font-semibold">Notes</th>
+                    <th className="py-3 px-4 label-caps text-muted font-semibold">Quiz</th>
+                    <th className="py-3 px-4 label-caps text-muted font-semibold">Schedule</th>
+                    <th className="py-3 px-4 label-caps text-muted font-semibold">Evaluation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lectures.map((lecture) => (
+                    <tr key={lecture.id} className="border-b border-border/70 last:border-0">
+                      <td className="py-3.5 pr-4 font-serif font-semibold text-text">{lecture.title}</td>
+                      <td className="py-3.5 px-4 text-muted">{lecture.word_count.toLocaleString()}</td>
+                      <td className="py-3.5 px-4"><StatusDot on={lecture.has_notes} /></td>
+                      <td className="py-3.5 px-4"><StatusDot on={lecture.has_quiz} /></td>
+                      <td className="py-3.5 px-4"><StatusDot on={lecture.has_schedule} /></td>
+                      <td className="py-3.5 px-4"><StatusDot on={lecture.has_evaluation} /></td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {lectures.map((lecture) => (
-                      <tr key={lecture.id} className="border-b border-border/70 last:border-0">
-                        <td className="py-3 pr-4 font-medium text-text">{lecture.title}</td>
-                        <td className="py-3 px-4 text-muted">{lecture.word_count}</td>
-                        <td className="py-3 px-4"><StatusDot on={lecture.has_notes} /></td>
-                        <td className="py-3 px-4"><StatusDot on={lecture.has_quiz} /></td>
-                        <td className="py-3 px-4"><StatusDot on={lecture.has_schedule} /></td>
-                        <td className="py-3 px-4"><StatusDot on={lecture.has_evaluation} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </>
@@ -269,41 +252,9 @@ export function Analytics() {
   );
 }
 
-const TONE_CLASSES: Record<string, string> = {
-  primary: 'bg-primary-light text-primary',
-  success: 'bg-success-light text-success',
-  accent: 'bg-accent-light text-accent',
-  warning: 'bg-warning-light text-warning',
-};
-
-function SummaryCard({
-  title,
-  value,
-  subtitle,
-  icon,
-  tone,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  icon: ReactNode;
-  tone: string;
-}) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl p-6 shadow-soft">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-text">{title}</h3>
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${TONE_CLASSES[tone]}`}>{icon}</div>
-      </div>
-      <div className="text-4xl font-bold tracking-tight text-text mb-1.5">{value}</div>
-      <p className="text-sm text-muted">{subtitle}</p>
-    </div>
-  );
-}
-
 function StatusDot({ on }: { on: boolean }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${on ? 'text-success' : 'text-muted'}`}>
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${on ? 'text-primary' : 'text-muted'}`}>
       {on ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
       {on ? 'Ready' : 'Missing'}
     </span>

@@ -187,7 +187,7 @@ export function App() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10 md:pl-2 relative">
+    <div className="max-w-4xl mx-auto px-8 sm:px-10 py-10 md:pl-6 relative">
       {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
@@ -195,8 +195,8 @@ export function App() {
             initial={{ opacity: 0, y: -20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl shadow-soft-lg border ${
-              toast.type === 'error' ? 'bg-error-light border-error/30 text-error' : 'bg-success-light border-success/30 text-success'
+            className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-soft-lg ${
+              toast.type === 'error' ? 'bg-error-light text-error' : 'bg-success-light text-success'
             }`}
           >
             {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
@@ -208,15 +208,15 @@ export function App() {
         )}
       </AnimatePresence>
 
-      <div className="mb-7 flex items-center justify-between">
+      <div className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-text mb-1">Upload lecture</h1>
+          <h1 className="font-serif text-4xl font-semibold tracking-tight text-text mb-2">Upload lecture</h1>
           <p className="text-sm text-muted">Get a clean transcript, notes, and a practice quiz.</p>
         </div>
 
         <button
           onClick={() => setSettingsOpen(!settingsOpen)}
-          className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-border text-sm font-medium hover:bg-surface2 transition-colors shadow-soft"
+          className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface2 transition-colors shrink-0"
         >
           <Settings className="w-4 h-4" />
           Advanced
@@ -233,8 +233,8 @@ export function App() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden mb-6"
           >
-            <div className="p-6 bg-surface border border-border rounded-2xl shadow-soft">
-              <h3 className="font-bold mb-4 flex items-center gap-2 text-text">
+            <div className="p-6 bg-surface rounded-lg">
+              <h3 className="font-serif font-semibold text-lg mb-4 flex items-center gap-2 text-text">
                 <Settings className="w-4 h-4 text-primary" />
                 Processing settings
               </h3>
@@ -256,7 +256,7 @@ export function App() {
                 <div>
                   <label className="block text-sm font-medium mb-2 text-text">Transcript format</label>
                   <select
-                    className="w-full bg-bg border border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none"
+                    className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none"
                     value={transcriptFormat}
                     onChange={(e) => setTranscriptFormat(e.target.value as TranscriptFormat)}
                   >
@@ -276,14 +276,14 @@ export function App() {
       {/* Main Area */}
       <motion.div
         layout
-        className="bg-surface border border-border rounded-2xl overflow-hidden shadow-soft"
+        className="bg-surface rounded-lg overflow-hidden"
       >
 
         {state === 'idle' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className={`p-12 text-center border-2 border-dashed m-5 rounded-2xl transition-colors ${file ? 'border-primary bg-primary-light/30' : 'border-border2 hover:border-primary/40 bg-bg'}`}
+            className={`p-12 text-center border-2 border-dashed m-5 rounded-lg transition-colors ${file ? 'border-primary bg-primary-light/30' : 'border-border2 hover:border-primary/40'}`}
             onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-primary'); }}
             onDragLeave={(e) => { e.currentTarget.classList.remove('border-primary'); }}
             onDrop={handleDrop}
@@ -298,14 +298,14 @@ export function App() {
 
             {!file ? (
               <>
-                <div className="w-16 h-16 rounded-2xl bg-primary-light flex items-center justify-center mx-auto mb-6">
-                  <UploadCloud className="w-8 h-8 text-primary" />
+                <div className="w-14 h-14 rounded-full bg-primary-light flex items-center justify-center mx-auto mb-6">
+                  <UploadCloud className="w-7 h-7 text-primary" />
                 </div>
-                <h3 className="text-xl font-bold mb-2 text-text">Drag & drop your recording here</h3>
+                <h3 className="font-serif text-xl font-semibold mb-2 text-text">Drag & drop your recording here</h3>
                 <p className="text-sm text-muted mb-6">or click to browse from your computer</p>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-soft"
+                  className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition-colors"
                 >
                   Select file
                 </button>
@@ -317,10 +317,10 @@ export function App() {
               </>
             ) : (
               <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }}>
-                <div className="w-16 h-16 rounded-2xl bg-primary-light flex items-center justify-center mx-auto mb-6">
-                  <FileAudio className="w-8 h-8 text-primary" />
+                <div className="w-14 h-14 rounded-full bg-primary-light flex items-center justify-center mx-auto mb-6">
+                  <FileAudio className="w-7 h-7 text-primary" />
                 </div>
-                <h3 className="text-xl font-bold mb-1.5 text-text truncate max-w-md mx-auto">{file.name}</h3>
+                <h3 className="font-serif text-xl font-semibold mb-1.5 text-text truncate max-w-md mx-auto">{file.name}</h3>
                 <p className="text-sm text-muted mb-1">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
                 <p className="text-xs text-muted mb-8">
                   {estimatedMinutes != null
@@ -331,13 +331,13 @@ export function App() {
                 <div className="flex items-center justify-center gap-3">
                   <button
                     onClick={() => setFile(null)}
-                    className="bg-surface2 hover:bg-border border border-border text-text px-6 py-3 rounded-xl text-sm font-medium transition-colors"
+                    className="bg-surface2 hover:bg-border text-text px-6 py-3 rounded-lg text-sm font-medium transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={startProcessing}
-                    className="bg-primary hover:bg-primary-dark text-white px-8 py-3 rounded-xl text-sm font-bold transition-colors shadow-soft flex items-center gap-2"
+                    className="bg-primary hover:bg-primary-dark text-white px-8 py-3 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
                   >
                     <Play className="w-4 h-4" /> Process file
                   </button>
@@ -361,7 +361,7 @@ export function App() {
                 </svg>
                 <Loader2 className="w-7 h-7 text-primary animate-spin" />
               </div>
-              <h3 className="text-lg font-bold text-text mb-1">{currentStep.label}…</h3>
+              <h3 className="font-serif text-lg font-semibold text-text mb-1">{currentStep.label}…</h3>
               <p className="text-sm text-muted">
                 {estimatedMinutes != null ? `Estimated ~${estimatedMinutes} min total — ` : ''}{Math.round(progress)}% complete
               </p>
@@ -373,8 +373,8 @@ export function App() {
                 const done = progress > s.at + 4 || (progress >= 96 && s.key !== currentStep.key);
                 const active = s.key === currentStep.key;
                 return (
-                  <div key={s.key} className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ${active ? 'bg-primary-light' : ''}`}>
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${done ? 'bg-success text-white' : active ? 'bg-primary text-white' : 'bg-surface2 text-muted'}`}>
+                  <div key={s.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${active ? 'bg-primary-light' : ''}`}>
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${done ? 'bg-primary text-white' : active ? 'bg-primary text-white' : 'bg-surface2 text-muted'}`}>
                       {done ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}
                     </div>
                     <span className={`text-sm ${active ? 'text-text font-medium' : done ? 'text-muted' : 'text-muted/60'}`}>{s.label}</span>
@@ -391,17 +391,17 @@ export function App() {
             animate={{ opacity: 1, y: 0 }}
             className="p-0"
           >
-            <div className="bg-success-light border-b border-success/20 p-4 flex items-center justify-center gap-2 text-success text-sm font-medium">
+            <div className="bg-success-light p-4 flex items-center justify-center gap-2 text-success text-sm font-medium">
               <CheckCircle2 className="w-5 h-5" /> Processing complete! Results are ready.
             </div>
 
             {result?.lecture_id && (
-              <div className="bg-primary-light/50 border-b border-primary/10 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="bg-primary-light/50 p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <p className="text-sm text-text">
                   Your lecture is saved. Generate <span className="font-medium">notes, quizzes, a study schedule</span> or <span className="font-medium">chat</span> with it.
                 </p>
                 <Link to={`/app/lecture/${result.lecture_id}`}
-                  className="shrink-0 inline-flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-xl font-semibold shadow-soft">
+                  className="shrink-0 inline-flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg font-semibold">
                   <Sparkles className="w-4 h-4" /> Open study tools
                 </Link>
               </div>
@@ -410,13 +410,13 @@ export function App() {
             <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
               {/* Left: Audio Players */}
               <div className="p-8">
-                <h3 className="font-bold mb-5 text-text">Audio comparison</h3>
+                <h3 className="font-serif font-semibold text-lg mb-5 text-text">Audio comparison</h3>
 
                 <div className="space-y-4">
                   {/* Before */}
-                  <div className="bg-surface2 rounded-2xl p-4">
+                  <div className="bg-surface2 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-sm font-medium text-text">Original</span>
+                      <span className="label-caps text-muted">Original</span>
                       {result?.original_audio_url && (
                         <a href={buildUrl(result.original_audio_url)} className="text-xs text-muted hover:text-text flex items-center gap-1" download>
                           <Download className="w-3 h-3" /> Download
@@ -431,11 +431,11 @@ export function App() {
                   </div>
 
                   {/* After */}
-                  <div className="bg-primary-light rounded-2xl p-4">
+                  <div className="bg-primary-light rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-sm font-medium text-primary">Cleaned</span>
+                      <span className="label-caps text-primary-dark">Cleaned</span>
                       {result?.audio_url && (
-                        <a href={buildUrl(result.audio_url)} className="text-xs text-primary hover:text-primary-dark flex items-center gap-1" download>
+                        <a href={buildUrl(result.audio_url)} className="text-xs text-primary-dark hover:opacity-70 flex items-center gap-1" download>
                           <Download className="w-3 h-3" /> WAV
                         </a>
                       )}
@@ -449,11 +449,11 @@ export function App() {
                 </div>
 
                 <div className="mt-7 pt-7 border-t border-border">
-                  <h3 className="font-bold mb-4 text-text">Speakers detected</h3>
+                  <h3 className="font-serif font-semibold text-lg mb-4 text-text">Speakers detected</h3>
                   {(result?.speaker_audio && Object.keys(result.speaker_audio).length > 0) ? (
                     <div className="space-y-3">
                       {Object.entries(result.speaker_audio).map(([speaker, url]) => (
-                        <div key={speaker} className="p-3.5 bg-surface2 rounded-2xl">
+                        <div key={speaker} className="p-3.5 bg-surface2 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2.5">
                               <Users2 className="w-4 h-4 text-primary" />
@@ -476,7 +476,7 @@ export function App() {
               {/* Right: Transcript */}
               <div className="p-8 flex flex-col h-full">
                 <div className="flex items-center justify-between mb-5">
-                  <h3 className="font-bold text-text">Transcript</h3>
+                  <h3 className="font-serif font-semibold text-lg text-text">Transcript</h3>
                   {result?.transcript_url && (
                     <a href={buildUrl(result.transcript_url)} download className="px-3 py-1.5 text-xs font-medium rounded-full bg-surface2 text-muted hover:text-text">
                       Download
@@ -484,7 +484,7 @@ export function App() {
                   )}
                 </div>
 
-                <div className="flex-1 bg-surface2 rounded-2xl p-4 overflow-y-auto max-h-[400px] space-y-4">
+                <div className="flex-1 bg-surface2 rounded-lg p-4 overflow-y-auto max-h-[400px] space-y-4">
                   {(result?.transcript_segments && result.transcript_segments.length > 0) ? (
                     result.transcript_segments.map((seg, idx) => (
                       <div key={`${seg.start}-${idx}`}>
@@ -527,7 +527,7 @@ export function App() {
             animate={{ opacity: 1 }}
             className="p-8"
           >
-            <div className="bg-error-light border border-error/20 text-error p-4 rounded-2xl flex items-start gap-3">
+            <div className="bg-error-light text-error p-4 rounded-lg flex items-start gap-3">
               <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold mb-1">Processing failed</p>
