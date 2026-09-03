@@ -38,6 +38,9 @@ outputs/
 cache/
 temp/
 data/lectures/
+data/students/
+data/sessions.json
+data/lecture_sessions/
 fyp audio/
 *.wav
 *.mp3
