@@ -103,15 +103,27 @@ export function Lecture() {
 
 // ----------------------------------------------------------------- Transcript
 function TranscriptTab({ lecture }: { lecture: LectureT }) {
-  const audio = lecture.metadata?.audio_url;
+  const audioFiles = lecture.audio_files || [];
+  const legacyAudio = lecture.metadata?.audio_url;
   return (
     <div className="space-y-4">
-      {audio && (
+      {audioFiles.length > 0 ? (
+        <div className={`${card} space-y-3`}>
+          {audioFiles.map((a) => (
+            <div key={a.audio_id}>
+              <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
+                {a.kind}{a.duration ? ` · ${Math.round(a.duration)}s` : ''}
+              </p>
+              <audio controls className="w-full" src={buildUrl(a.file_path)} />
+            </div>
+          ))}
+        </div>
+      ) : legacyAudio ? (
         <div className={card}>
           <p className="text-sm font-medium text-text mb-2">Cleaned audio</p>
-          <audio controls className="w-full" src={buildUrl(audio)} />
+          <audio controls className="w-full" src={buildUrl(legacyAudio)} />
         </div>
-      )}
+      ) : null}
       <div className={card}>
         {lecture.transcript_segments?.length ? (
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
@@ -160,7 +172,8 @@ function QuizTab({ id, initial }: { id: string; initial: QuizQuestion[] | null }
   const [quiz, setQuiz] = useState<QuizQuestion[] | null>(initial);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
-  const [answers, setAnswers] = useState<Record<number, number>>({});
+  // question_id -> selected answer_id
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<GradeResult | null>(null);
   const gen = (refresh = false) => {
     setLoading(true); setErr(''); setResult(null); setAnswers({});
@@ -168,7 +181,7 @@ function QuizTab({ id, initial }: { id: string; initial: QuizQuestion[] | null }
   };
   useEffect(() => { if (!initial) gen(); }, []);
   const submit = () => {
-    const arr = (quiz || []).map((_, i) => (answers[i] ?? -1));
+    const arr = (quiz || []).map((q) => answers[q.question_id] ?? null);
     api.gradeQuiz(id, arr).then(setResult).catch((e) => setErr(e.message));
   };
   if (loading) return <Spinner label="Generating quiz…" />;
@@ -177,22 +190,22 @@ function QuizTab({ id, initial }: { id: string; initial: QuizQuestion[] | null }
   return (
     <div className="space-y-4">
       {quiz.map((q, qi) => {
-        const correct = result?.breakdown[qi];
         return (
-          <div key={qi} className={card}>
+          <div key={q.question_id} className={card}>
             <p className="font-medium text-text mb-3">{qi + 1}. {q.question}</p>
             <div className="space-y-2">
-              {q.options.map((opt, oi) => {
-                const picked = answers[qi] === oi;
+              {q.answers.map((a) => {
+                const picked = answers[q.question_id] === a.answer_id;
                 let cls = 'border-border hover:border-primary/50';
                 if (result) {
-                  if (oi === q.answer_index) cls = 'border-green-500 bg-green-500/10';
+                  if (a.is_correct) cls = 'border-green-500 bg-green-500/10';
                   else if (picked) cls = 'border-red-500 bg-red-500/10';
                 }
                 return (
-                  <button key={oi} disabled={!!result} onClick={() => setAnswers({ ...answers, [qi]: oi })}
+                  <button key={a.answer_id} disabled={!!result}
+                    onClick={() => setAnswers({ ...answers, [q.question_id]: a.answer_id })}
                     className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition ${picked && !result ? 'border-primary bg-primary/10' : cls}`}>
-                    {opt}
+                    {a.text}
                   </button>
                 );
               })}
@@ -215,21 +228,62 @@ function QuizTab({ id, initial }: { id: string; initial: QuizQuestion[] | null }
   );
 }
 
-// ----------------------------------------------------------------- Schedule
+// ----------------------------------------------------------------- Schedule (StudyPlan)
 function ScheduleTab({ id, initial }: { id: string; initial: Schedule | null }) {
   const [sch, setSch] = useState<Schedule | null>(initial);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [availableTime, setAvailableTime] = useState(initial?.available_time || '');
+  const [learningGoals, setLearningGoals] = useState(initial?.learning_goals || '');
+
   const gen = (refresh = false) => {
     setLoading(true); setErr('');
-    api.schedule(id, 7, refresh).then((r) => setSch(r.schedule)).catch((e) => setErr(e.message)).finally(() => setLoading(false));
+    api.schedule(id, 7, refresh, availableTime || undefined, learningGoals || undefined)
+      .then((r) => setSch(r.schedule))
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoading(false));
   };
-  useEffect(() => { if (!initial) gen(); }, []);
+
   if (loading) return <Spinner label="Building study plan…" />;
   if (err) return <div className="space-y-3"><ErrorBox msg={err} /><button className={btn} onClick={() => gen()}>Retry</button></div>;
-  if (!sch?.plan) return <p className="text-muted text-sm">No schedule.</p>;
+
+  // No plan yet — collect the real inputs the plan should be built around
+  // (StudyPlan.available_time / StudyPlan.learning_goals) before generating.
+  if (!sch?.plan) {
+    return (
+      <div className={`${card} space-y-4`}>
+        <div>
+          <label className="text-sm font-medium text-text block mb-1">How much time do you have?</label>
+          <input
+            value={availableTime}
+            onChange={(e) => setAvailableTime(e.target.value)}
+            placeholder="e.g. 1 hour per day"
+            className="w-full px-3 py-2 rounded-lg border border-border bg-surface2 text-sm outline-none focus:border-primary"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-text block mb-1">What are your learning goals?</label>
+          <textarea
+            value={learningGoals}
+            onChange={(e) => setLearningGoals(e.target.value)}
+            placeholder="e.g. understand this well enough for my midterm"
+            rows={2}
+            className="w-full px-3 py-2 rounded-lg border border-border bg-surface2 text-sm outline-none focus:border-primary resize-none"
+          />
+        </div>
+        <button className={btn} onClick={() => gen()}>Build my study plan</button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
+      {(sch.available_time || sch.learning_goals) && (
+        <div className={`${card} text-sm text-muted`}>
+          {sch.available_time && <p>⏱ {sch.available_time}</p>}
+          {sch.learning_goals && <p>🎯 {sch.learning_goals}</p>}
+        </div>
+      )}
       {sch.plan.map((d) => (
         <div key={d.day} className={card}>
           <div className="flex justify-between items-center mb-2">
@@ -247,6 +301,11 @@ function ScheduleTab({ id, initial }: { id: string; initial: Schedule | null }) 
           <ul className="list-disc list-inside text-sm text-muted space-y-1">{sch.tips.map((t, i) => <li key={i}>{t}</li>)}</ul>
         </div>
       )}
+      <div className="flex justify-end">
+        <button className="text-sm text-muted hover:text-text inline-flex items-center gap-1" onClick={() => gen(true)}>
+          <RefreshCw className="w-4 h-4" /> Rebuild plan
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,31 +1,60 @@
 import React, { useState, MouseEvent } from 'react';
-import { Mail, Lock, User, ArrowRight, BookOpen, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Lock, User, AtSign, ArrowRight, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
 
 export function Signup() {
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!e.currentTarget) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    
+
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
-    
+
     // Subtle tilt for a more natural feel. Reduced further to 3 to match the visual feel of the shorter Login box.
-    const rotateX = ((y - centerY) / centerY) * -3; 
+    const rotateX = ((y - centerY) / centerY) * -3;
     const rotateY = ((x - centerX) / centerX) * 3;
-    
+
     setRotation({ x: rotateX, y: rotateY });
   };
 
   const handleMouseLeave = () => {
     setRotation({ x: 0, y: 0 });
     setIsHovered(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username.trim() || !password) {
+      setError('Username and password are required.');
+      return;
+    }
+    if (password.length < 4) {
+      setError('Password should be at least 4 characters.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await api.signup(username.trim(), password, name.trim() || undefined);
+      navigate('/app/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'Sign up failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -46,15 +75,15 @@ export function Signup() {
             onMouseLeave={handleMouseLeave}
             className="w-full max-w-md relative transition-transform duration-200 ease-out preserve-3d"
             style={{
-              transform: isHovered 
-                ? `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg) translateZ(30px)` 
+              transform: isHovered
+                ? `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg) translateZ(30px)`
                 : 'rotateX(0deg) rotateY(0deg) translateZ(0px)',
               transformStyle: 'preserve-3d'
             }}
           >
             {/* Glossy Card */}
             <div className="bg-surface/60 backdrop-blur-xl border border-white/10 p-10 rounded-3xl shadow-xl relative overflow-hidden">
-              
+
               {/* Inner Glow */}
               <div className="absolute inset-0 bg-gradient-to-bl from-white/10 to-transparent opacity-50 pointer-events-none" />
 
@@ -64,7 +93,14 @@ export function Signup() {
                   <p className="text-muted text-sm">Join Lectra-AI and transform how you learn</p>
                 </div>
 
-                <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+                <form className="space-y-6" onSubmit={handleSubmit}>
+                  {error && (
+                    <div className="flex items-start gap-2 rounded-xl border border-error/30 bg-error-light px-4 py-3 text-sm text-error">
+                      <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-muted ml-1">Full Name</label>
                     <div className="relative group">
@@ -73,6 +109,9 @@ export function Signup() {
                       </div>
                       <input
                         type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        autoComplete="name"
                         className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                         placeholder="John Doe"
                       />
@@ -80,15 +119,18 @@ export function Signup() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted ml-1">Email Address</label>
+                    <label className="text-sm font-medium text-muted ml-1">Username</label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
-                        <Mail className="w-5 h-5" />
+                        <AtSign className="w-5 h-5" />
                       </div>
                       <input
-                        type="email"
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        autoComplete="username"
                         className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
-                        placeholder="john@nuces.edu.pk"
+                        placeholder="hanzala"
                       />
                     </div>
                   </div>
@@ -101,19 +143,30 @@ export function Signup() {
                       </div>
                       <input
                         type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="new-password"
                         className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                         placeholder="••••••••"
                       />
                     </div>
                   </div>
 
-                  <Link to="/app/dashboard">
-                    <button className="w-full mt-8 bg-accent hover:bg-accent2 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg group overflow-hidden relative">
-                      <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
-                      <span>Sign Up</span>
-                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  </Link>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-8 bg-accent hover:bg-accent2 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg group overflow-hidden relative disabled:opacity-60"
+                  >
+                    <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
+                    {loading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <span>Sign Up</span>
+                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      </>
+                    )}
+                  </button>
 
                   <div className="mt-8 text-center text-sm text-muted">
                     Already have an account?{' '}

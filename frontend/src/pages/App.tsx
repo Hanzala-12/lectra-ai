@@ -3,6 +3,7 @@ import { UploadCloud, Settings, FileAudio, Play, Download, CheckCircle2, AlertCi
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
+import { getToken } from '../lib/api';
 
 type ProcessState = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
@@ -125,14 +126,18 @@ export function App() {
 
       setState('processing');
 
+      const token = getToken();
       const response = await fetch(buildUrl('/api/process-lecture'), {
         method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: formData,
       });
 
-      const data = (await response.json()) as ProcessResult;
+      const data = (await response.json()) as ProcessResult & { detail?: string };
       if (!response.ok || !data.success) {
-        throw new Error(data.error || `Request failed with status ${response.status}`);
+        throw new Error(
+          data.error || data.detail || `Request failed with status ${response.status}`,
+        );
       }
 
       setProgress(100);
