@@ -35,16 +35,21 @@ class LectureRepository:
         transcript_segments: Optional[List[Dict]] = None,
         diarization: Optional[List[Dict]] = None,
         metadata: Optional[Dict] = None,
+        student_id: Optional[str] = None,
+        audio_files: Optional[List[Dict]] = None,
     ) -> Dict[str, Any]:
         lecture_id = uuid.uuid4().hex[:12]
         record = {
             "id": lecture_id,
             "title": title or f"Lecture {lecture_id}",
             "created_at": time.time(),
+            "student_id": student_id,  # owner — see student_repository.py. None = legacy/orphaned record predating auth
             "transcript_text": transcript_text or "",
             "transcript_segments": transcript_segments or [],
             "diarization": diarization or [],
             "metadata": metadata or {},
+            "audio_files": audio_files
+            or [],  # AudioFile entity — see backend.py::process_lecture()
             # generated artifacts (filled on demand)
             "notes": None,
             "quiz": None,
@@ -76,7 +81,11 @@ class LectureRepository:
         self._write(record)
         return record
 
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self, student_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """If student_id is given, only that student's lectures are returned.
+        Records created before the auth layer existed have student_id=None and
+        won't match any real student_id — they're effectively orphaned, not
+        deleted (still on disk, just not visible in any student's library)."""
         items = []
         for name in os.listdir(self.data_dir):
             if not name.endswith(".json"):
@@ -86,6 +95,8 @@ class LectureRepository:
                     os.path.join(self.data_dir, name), "r", encoding="utf-8"
                 ) as f:
                     r = json.load(f)
+                if student_id is not None and r.get("student_id") != student_id:
+                    continue
                 # lightweight summary for the library view
                 items.append(
                     {

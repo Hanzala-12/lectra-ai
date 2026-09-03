@@ -9,18 +9,24 @@ RAG-grounded chatbot. Included into backend.py with two lines:
 
 Every LLM-backed route degrades gracefully: if OPENROUTER_API_KEY is not set it
 returns HTTP 503 with a clear message instead of crashing.
+
+All /lecture* routes require a logged-in student (see auth_api.py) and are
+scoped to that student's own lectures — a lecture belonging to another student
+(or a legacy record created before auth existed) 404s exactly like a
+nonexistent one, rather than leaking whether it exists.
 """
 
 import logging
 import time
 from typing import List, Optional, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from llm_client import get_llm, LLMNotConfigured
 from lecture_repository import get_repository
 from rag_engine import RagEngine, build_context
+from auth_api import get_current_student
 import study_tools
 
 logger = logging.getLogger(__name__)
@@ -40,10 +46,12 @@ class QuizRequest(BaseModel):
 
 class ScheduleRequest(BaseModel):
     days: int = 7
+    available_time: Optional[str] = None  # StudyPlan.available_time — e.g. "1 hour/day"
+    learning_goals: Optional[str] = None  # StudyPlan.learning_goals — free text
 
 
 class GradeRequest(BaseModel):
-    answers: List[int]
+    answers: List[Optional[str]]  # submitted answer_id per question, by position
 
 
 class ChatRequest(BaseModel):
@@ -52,9 +60,12 @@ class ChatRequest(BaseModel):
 
 
 # ----------------------------------------------------------------- helpers
-def _lecture_or_404(lecture_id: str):
+def _lecture_or_404(lecture_id: str, student_id: str):
+    """Fetch a lecture, scoped to its owner. A lecture that exists but belongs
+    to someone else 404s the same as one that doesn't exist at all — no
+    existence-leaking via a 403."""
     rec = get_repository().get(lecture_id)
-    if rec is None:
+    if rec is None or rec.get("student_id") != student_id:
         raise HTTPException(status_code=404, detail="Lecture not found")
     return rec
 
@@ -83,6 +94,7 @@ def _run_llm(fn, *args, **kwargs):
 # ----------------------------------------------------------------- status
 @router.get("/llm-status")
 async def llm_status():
+    """Not student-scoped — this is system-wide config info, not lecture data."""
     llm = get_llm()
     return {
         "configured": llm.is_configured(),
@@ -92,28 +104,34 @@ async def llm_status():
 
 # ----------------------------------------------------------------- library / CRUD
 @router.get("/library")
-async def library():
-    return {"lectures": get_repository().list()}
+async def library(student_id: str = Depends(get_current_student)):
+    return {"lectures": get_repository().list(student_id=student_id)}
 
 
 @router.post("/lecture")
-async def create_lecture(body: CreateLecture):
+async def create_lecture(
+    body: CreateLecture, student_id: str = Depends(get_current_student)
+):
     """Create a lecture from raw transcript text (e.g. for testing without audio)."""
     rec = get_repository().create(
         title=body.title,
         transcript_text=body.transcript,
         transcript_segments=body.transcript_segments or [],
+        student_id=student_id,
     )
     return {"id": rec["id"], "title": rec["title"]}
 
 
 @router.get("/lecture/{lecture_id}")
-async def get_lecture(lecture_id: str):
-    return _lecture_or_404(lecture_id)
+async def get_lecture(lecture_id: str, student_id: str = Depends(get_current_student)):
+    return _lecture_or_404(lecture_id, student_id)
 
 
 @router.delete("/lecture/{lecture_id}")
-async def delete_lecture(lecture_id: str):
+async def delete_lecture(
+    lecture_id: str, student_id: str = Depends(get_current_student)
+):
+    _lecture_or_404(lecture_id, student_id)  # 404 if missing OR not yours
     ok = get_repository().delete(lecture_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Lecture not found")
@@ -122,8 +140,12 @@ async def delete_lecture(lecture_id: str):
 
 # ----------------------------------------------------------------- generators
 @router.post("/lecture/{lecture_id}/notes")
-async def make_notes(lecture_id: str, refresh: bool = False):
-    rec = _lecture_or_404(lecture_id)
+async def make_notes(
+    lecture_id: str,
+    refresh: bool = False,
+    student_id: str = Depends(get_current_student),
+):
+    rec = _lecture_or_404(lecture_id, student_id)
     if rec.get("notes") and not refresh:
         return {"notes": rec["notes"], "cached": True}
     llm = _require_llm()
@@ -134,9 +156,12 @@ async def make_notes(lecture_id: str, refresh: bool = False):
 
 @router.post("/lecture/{lecture_id}/quiz")
 async def make_quiz(
-    lecture_id: str, body: QuizRequest = QuizRequest(), refresh: bool = False
+    lecture_id: str,
+    body: QuizRequest = QuizRequest(),
+    refresh: bool = False,
+    student_id: str = Depends(get_current_student),
 ):
-    rec = _lecture_or_404(lecture_id)
+    rec = _lecture_or_404(lecture_id, student_id)
     if rec.get("quiz") and not refresh:
         return {"quiz": rec["quiz"], "cached": True}
     llm = _require_llm()
@@ -148,19 +173,26 @@ async def make_quiz(
 
 
 @router.post("/lecture/{lecture_id}/quiz/grade")
-async def grade(lecture_id: str, body: GradeRequest):
-    rec = _lecture_or_404(lecture_id)
+async def grade(
+    lecture_id: str,
+    body: GradeRequest,
+    student_id: str = Depends(get_current_student),
+):
+    rec = _lecture_or_404(lecture_id, student_id)
     if not rec.get("quiz"):
         raise HTTPException(
             status_code=400, detail="No quiz generated for this lecture yet"
         )
     result = study_tools.grade_quiz(rec["quiz"], body.answers)
 
-    # Persist the attempt — previously this computed a score and returned it
-    # without ever saving it, so no quiz history/progress data existed anywhere.
+    # Persist the attempt, tagged with who took it (QuizResult in the ERD is
+    # keyed by quiz+student — the lecture is already scoped to one student
+    # above, but storing student_id on the attempt itself keeps QuizResult
+    # meaningful on its own if lectures are ever shared across students later).
     attempts = list(rec.get("quiz_attempts") or [])
     attempts.append(
         {
+            "student_id": student_id,
             "graded_at": time.time(),
             "answers": body.answers,
             "score": result["score"],
@@ -175,22 +207,45 @@ async def grade(lecture_id: str, body: GradeRequest):
 
 @router.post("/lecture/{lecture_id}/schedule")
 async def make_schedule(
-    lecture_id: str, body: ScheduleRequest = ScheduleRequest(), refresh: bool = False
+    lecture_id: str,
+    body: ScheduleRequest = ScheduleRequest(),
+    refresh: bool = False,
+    student_id: str = Depends(get_current_student),
 ):
-    rec = _lecture_or_404(lecture_id)
+    rec = _lecture_or_404(lecture_id, student_id)
     if rec.get("schedule") and not refresh:
         return {"schedule": rec["schedule"], "cached": True}
     llm = _require_llm()
-    schedule = _run_llm(
-        study_tools.generate_schedule, rec["transcript_text"], llm, body.days
+    generated = _run_llm(
+        study_tools.generate_schedule,
+        rec["transcript_text"],
+        llm,
+        body.days,
+        body.available_time,
+        body.learning_goals,
     )
+    # StudyPlan: the LLM-generated plan/tips plus the real inputs and
+    # ownership fields the ERD's StudyPlan entity actually specifies
+    # (student_id, lecture_id, available_time, learning_goals).
+    schedule = {
+        **generated,
+        "student_id": student_id,
+        "lecture_id": lecture_id,
+        "available_time": body.available_time,
+        "learning_goals": body.learning_goals,
+        "created_at": time.time(),
+    }
     get_repository().update(lecture_id, schedule=schedule)
     return {"schedule": schedule, "cached": False}
 
 
 @router.post("/lecture/{lecture_id}/evaluate")
-async def evaluate(lecture_id: str, refresh: bool = False):
-    rec = _lecture_or_404(lecture_id)
+async def evaluate(
+    lecture_id: str,
+    refresh: bool = False,
+    student_id: str = Depends(get_current_student),
+):
+    rec = _lecture_or_404(lecture_id, student_id)
     if rec.get("evaluation") and not refresh:
         return {"evaluation": rec["evaluation"], "cached": True}
     llm = _require_llm()
@@ -201,8 +256,12 @@ async def evaluate(lecture_id: str, refresh: bool = False):
 
 # ----------------------------------------------------------------- RAG chat
 @router.post("/lecture/{lecture_id}/chat")
-async def chat(lecture_id: str, body: ChatRequest):
-    rec = _lecture_or_404(lecture_id)
+async def chat(
+    lecture_id: str,
+    body: ChatRequest,
+    student_id: str = Depends(get_current_student),
+):
+    rec = _lecture_or_404(lecture_id, student_id)
     llm = _require_llm()
 
     engine = RagEngine.from_transcript(rec["transcript_text"])
