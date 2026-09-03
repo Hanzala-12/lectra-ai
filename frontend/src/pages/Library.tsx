@@ -9,6 +9,16 @@ function formatDuration(seconds?: number) {
   return `${mins}m`;
 }
 
+// Rotating icon-badge tones per card — small, deliberate color variety
+// (like colored project tags in Linear/Notion-style tools) instead of every
+// card using the exact same single tint.
+const CARD_TONES = [
+  { badge: 'bg-primary-light text-primary', bar: 'from-primary to-primary-dark' },
+  { badge: 'bg-accent-light text-accent', bar: 'from-accent to-accent2' },
+  { badge: 'bg-success-light text-success', bar: 'from-success to-emerald-600' },
+  { badge: 'bg-warning-light text-warning', bar: 'from-warning to-orange-600' },
+];
+
 export function Library() {
   const [lectures, setLectures] = useState<LectureSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,12 +81,16 @@ export function Library() {
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((l) => (
+          {filtered.map((l, i) => {
+            const tone = CARD_TONES[i % CARD_TONES.length];
+            return (
             <Link key={l.id} to={`/app/lecture/${l.id}`}
-              className="group rounded-2xl border border-border bg-surface p-5 hover:border-primary/30 hover:shadow-soft-lg hover:-translate-y-0.5 transition-all relative shadow-soft flex flex-col">
+              className="group rounded-2xl border border-border bg-surface overflow-hidden hover:border-primary/30 hover:shadow-soft-lg hover:-translate-y-0.5 transition-all relative shadow-soft flex flex-col">
+              <div className={`h-1 bg-gradient-to-r ${tone.bar}`} />
+              <div className="p-5 flex flex-col flex-1">
               <div className="flex items-start justify-between mb-4">
-                <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center shrink-0">
-                  <Mic className="w-5 h-5 text-primary" />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tone.badge}`}>
+                  <Mic className="w-5 h-5" />
                 </div>
                 <button onClick={(e) => remove(l.id, e)} title="Delete"
                   className="text-muted hover:text-error opacity-0 group-hover:opacity-100 transition p-1.5 -m-1.5 rounded-lg hover:bg-error-light">
@@ -100,8 +114,10 @@ export function Library() {
                   </span>
                 )}
               </div>
+              </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

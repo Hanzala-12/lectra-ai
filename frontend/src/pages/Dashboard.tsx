@@ -35,6 +35,13 @@ function greeting() {
   return 'Good evening';
 }
 
+const heroLine = (lectureCount: number, completion: number) => {
+  if (lectureCount === 0) return "Upload your first lecture and let's get you studying.";
+  if (completion >= 80) return "You're in great shape — your study material is fully prepped.";
+  if (completion >= 40) return 'Solid progress. A few more lectures could use notes or a quiz.';
+  return 'Plenty of lectures waiting on notes and quizzes — pick one up?';
+};
+
 export function Dashboard() {
   const [lectures, setLectures] = useState<LectureSummary[]>([]);
   const [student, setStudent] = useState<Student | null>(null);
@@ -86,20 +93,35 @@ export function Dashboard() {
   const firstName = (student?.name || student?.username || '').split(' ')[0];
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10 md:pl-2">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-10">
-        <div>
-          <p className="text-sm font-medium text-primary mb-1">
+    <div className="max-w-7xl mx-auto px-6 py-8 md:pl-2">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-accent2 p-8 sm:p-10 mb-8 shadow-soft-lg">
+        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute -bottom-20 left-1/3 w-72 h-72 rounded-full bg-accent/30 blur-3xl" />
+        <div className="relative">
+          <p className="text-sm font-medium text-white/80 mb-2">
             {greeting()}{firstName ? `, ${firstName}` : ''} 👋
           </p>
-          <h1 className="text-3xl font-bold tracking-tight text-text">Your study dashboard</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-3 max-w-xl">
+            {heroLine(lectures.length, stats.completion)}
+          </h1>
+          <div className="flex flex-wrap items-center gap-3 mt-6">
+            <Link
+              to="/app/upload"
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-primary shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all"
+            >
+              <UploadCloud className="w-4 h-4" /> Upload lecture
+            </Link>
+            {lectures.length > 0 && (
+              <Link
+                to="/app/library"
+                className="inline-flex items-center gap-2 rounded-xl bg-white/15 backdrop-blur px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/25 transition-all"
+              >
+                <Library className="w-4 h-4" /> Browse library
+              </Link>
+            )}
+          </div>
         </div>
-        <Link
-          to="/app/upload"
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft hover:bg-primary-dark hover:shadow-soft-lg transition-all"
-        >
-          <UploadCloud className="w-4 h-4" /> Upload lecture
-        </Link>
       </div>
 
       <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4 mb-10">
@@ -163,10 +185,16 @@ export function Dashboard() {
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                   <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-surface2)" strokeWidth="10" />
                   <circle
-                    cx="50" cy="50" r="42" fill="none" stroke="var(--color-primary)" strokeWidth="10"
+                    cx="50" cy="50" r="42" fill="none" stroke="url(#readinessGradient)" strokeWidth="10"
                     strokeLinecap="round" strokeDasharray={`${stats.completion * 2.64} 264`}
                     className="transition-all duration-700"
                   />
+                  <defs>
+                    <linearGradient id="readinessGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="var(--color-primary)" />
+                      <stop offset="100%" stopColor="var(--color-accent)" />
+                    </linearGradient>
+                  </defs>
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-bold text-text">{stats.completion}%</span>
@@ -177,7 +205,7 @@ export function Dashboard() {
                 <ReadinessRow ok={stats.quizzes > 0} text={`${stats.quizzes} lecture${stats.quizzes === 1 ? '' : 's'} with quizzes`} />
                 <ReadinessRow ok={stats.analyzed > 0} text={`${stats.analyzed} lecture${stats.analyzed === 1 ? '' : 's'} analyzed`} />
               </div>
-              <div className="rounded-xl bg-primary-light p-4 text-sm text-text">
+              <div className="rounded-xl bg-gradient-to-br from-primary-light to-accent-light p-4 text-sm text-text">
                 <span className="font-bold">{stats.totalWords.toLocaleString()}</span> words across{' '}
                 <span className="font-bold">{stats.totalMinutes}</span> recorded minutes.
               </div>
@@ -198,7 +226,7 @@ const TONE_CLASSES: Record<string, string> = {
 
 function Stat({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone: string }) {
   return (
-    <div className="bg-surface border border-border rounded-2xl p-5 shadow-soft hover:shadow-soft-lg transition-shadow">
+    <div className="bg-surface border border-border rounded-2xl p-5 shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 transition-all">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${TONE_CLASSES[tone]}`}>{icon}</div>
       <div className="text-3xl font-bold tracking-tight text-text mb-1">{value}</div>
       <div className="text-sm text-muted">{label}</div>

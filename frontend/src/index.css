@@ -39,6 +39,18 @@
 
   --shadow-soft: 0 1px 2px rgba(20, 22, 43, 0.04), 0 8px 24px -12px rgba(20, 22, 43, 0.10);
   --shadow-soft-lg: 0 4px 12px rgba(20, 22, 43, 0.06), 0 16px 40px -16px rgba(20, 22, 43, 0.16);
+
+  /* The sidebar is deliberately NOT theme-aware — a permanently dark, rich
+     indigo chrome (like Linear/Notion/Spotify's nav chrome) is what actually
+     reads as "designed" rather than "clean template": it gives the shell
+     real contrast against the light content canvas instead of everything
+     sitting on one flat plane. Stays dark in both light and dark app theme. */
+  --color-sidebar: #14122b;
+  --color-sidebar2: #1c1a3a;
+  --color-sidebar-border: #2b2853;
+  --color-sidebar-text: #b8b4e0;
+  --color-sidebar-text-active: #ffffff;
+  --color-sidebar-muted: #716dab;
 }
 
 :root[data-theme="dark"] {

@@ -55,30 +55,31 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col items-center">
       <div className="flex flex-col md:flex-row max-w-[1400px] mx-auto w-full flex-1">
-        {/* Sidebar */}
-        <aside className="w-64 shrink-0 hidden md:flex md:flex-col py-6 px-4 border-r border-border min-h-screen sticky top-0">
-          <Link to="/" className="flex items-center gap-2.5 group px-2 mb-6">
+        {/* Sidebar — permanently dark chrome, independent of the app's light/dark
+            theme, for real contrast against the content canvas. */}
+        <aside className="w-64 shrink-0 hidden md:flex md:flex-col py-6 px-4 min-h-screen sticky top-0 bg-sidebar border-r border-sidebar-border">
+          <Link to="/" className="flex items-center gap-2.5 group px-2 mb-7">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white transition-transform group-hover:scale-105 shadow-soft">
               <GraduationCap className="w-[18px] h-[18px]" />
             </div>
-            <span className="font-extrabold text-xl tracking-tight text-text">
+            <span className="font-extrabold text-xl tracking-tight text-white">
               Lectra
             </span>
           </Link>
 
           <Link
             to="/app/upload"
-            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm mb-6 transition-all shadow-soft ${
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm mb-7 transition-all shadow-soft ${
               location.pathname === '/app/upload'
-                ? 'bg-primary-dark text-white'
-                : 'bg-primary text-white hover:bg-primary-dark hover:shadow-soft-lg'
+                ? 'bg-gradient-to-r from-primary-dark to-accent2 text-white'
+                : 'bg-gradient-to-r from-primary to-accent text-white hover:brightness-110 hover:shadow-soft-lg'
             }`}
           >
             <Plus className="w-4 h-4" strokeWidth={2.5} /> Upload lecture
           </Link>
 
           <nav className="flex flex-col gap-1 flex-1">
-            <p className="px-3 text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">Workspace</p>
+            <p className="px-3 text-[11px] font-semibold text-sidebar-muted uppercase tracking-wider mb-1.5">Workspace</p>
             {navItems.map(item => {
               const isActive = location.pathname === item.path || (item.path === '/app/dashboard' && location.pathname === '/app');
               return (
@@ -87,8 +88,8 @@ export function AppLayout() {
                   to={item.path}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                     isActive
-                      ? 'bg-primary-light text-primary font-semibold'
-                      : 'text-muted hover:bg-surface2 hover:text-text'
+                      ? 'bg-sidebar2 text-sidebar-text-active font-semibold shadow-[inset_2px_0_0_0_var(--color-accent)]'
+                      : 'text-sidebar-text hover:bg-sidebar2/60 hover:text-white'
                   }`}
                 >
                   {item.icon}
@@ -99,19 +100,19 @@ export function AppLayout() {
           </nav>
 
           {student && (
-            <div className="mt-auto pt-4 border-t border-border">
-              <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-surface2 transition-colors group">
-                <div className="w-9 h-9 rounded-full bg-primary-light text-primary flex items-center justify-center text-xs font-bold shrink-0">
+            <div className="mt-auto pt-4 border-t border-sidebar-border">
+              <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-sidebar2 transition-colors group">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent text-white flex items-center justify-center text-xs font-bold shrink-0">
                   {initials}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-text truncate">{student.name}</p>
-                  <p className="text-xs text-muted truncate">@{student.username}</p>
+                  <p className="text-sm font-semibold text-white truncate">{student.name}</p>
+                  <p className="text-xs text-sidebar-muted truncate">@{student.username}</p>
                 </div>
                 <button
                   onClick={handleLogout}
                   title="Log out"
-                  className="text-muted hover:text-error transition-colors p-1.5 rounded-lg hover:bg-error-light shrink-0"
+                  className="text-sidebar-muted hover:text-red-300 transition-colors p-1.5 rounded-lg hover:bg-red-500/10 shrink-0"
                 >
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -121,18 +122,18 @@ export function AppLayout() {
         </aside>
 
         {/* Mobile Nav Header */}
-        <div className="md:hidden w-full flex flex-col border-b border-border sticky top-0 bg-bg/95 backdrop-blur z-20">
+        <div className="md:hidden w-full flex flex-col sticky top-0 bg-sidebar z-20 border-b border-sidebar-border">
           <div className="py-4 px-6 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2 group">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-soft">
                 <GraduationCap className="w-4 h-4" />
               </div>
-              <span className="font-extrabold text-xl tracking-tight text-text">
+              <span className="font-extrabold text-xl tracking-tight text-white">
                 Lectra
               </span>
             </Link>
             {student && (
-              <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-muted hover:text-error transition-colors">
+              <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-sidebar-text hover:text-white transition-colors">
                 <LogOut className="w-3.5 h-3.5" /> Log out
               </button>
             )}
@@ -142,7 +143,7 @@ export function AppLayout() {
             <Link
               to="/app/upload"
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold whitespace-nowrap text-sm transition-colors shrink-0 ${
-                location.pathname === '/app/upload' ? 'bg-primary-dark text-white' : 'bg-primary text-white'
+                location.pathname === '/app/upload' ? 'bg-gradient-to-r from-primary-dark to-accent2 text-white' : 'bg-gradient-to-r from-primary to-accent text-white'
               }`}
             >
               <Plus className="w-4 h-4" /> Upload
@@ -153,7 +154,7 @@ export function AppLayout() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium whitespace-nowrap text-sm transition-colors shrink-0 ${isActive ? 'bg-primary-light text-primary' : 'bg-surface2 text-muted hover:text-text'}`}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium whitespace-nowrap text-sm transition-colors shrink-0 ${isActive ? 'bg-sidebar2 text-white' : 'text-sidebar-text hover:text-white'}`}
                 >
                   {item.icon}
                   {item.label}
