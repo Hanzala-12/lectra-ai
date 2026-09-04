@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'motion/react';
 import { Loader2, Search, Send, Sparkles, UploadCloud } from 'lucide-react';
 import { api, type LectureSummary } from '../lib/api';
+import { Reveal, StaggerGroup, StaggerItem } from '../components/Reveal';
 
 type Msg = { role: 'user' | 'ai'; text: string };
 
@@ -71,10 +73,10 @@ export function Chat() {
 
   return (
     <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
-      <div className="mb-8">
+      <Reveal className="mb-8">
         <h1 className="font-serif text-4xl font-semibold tracking-tight text-text mb-2">Ask your lecture</h1>
         <p className="text-sm text-muted">Answers are grounded in the lecture's transcript.</p>
-      </div>
+      </Reveal>
 
       {lectures.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border2 bg-surface p-12 text-center">
@@ -113,26 +115,27 @@ export function Chat() {
               </div>
             )}
 
-            <div className="space-y-1">
+            <StaggerGroup className="space-y-1">
               {filtered.length === 0 ? (
                 <p className="text-xs text-muted px-3.5 py-2">No lectures match "{q}".</p>
               ) : (
                 filtered.map((l) => (
-                  <button
-                    key={l.id}
-                    onClick={() => selectLecture(l.id)}
-                    className={`w-full text-left px-3.5 py-3 rounded-lg transition-colors ${
-                      l.id === selectedId ? 'bg-primary-light' : 'hover:bg-surface2'
-                    }`}
-                  >
-                    <p className={`text-sm font-serif font-semibold truncate ${l.id === selectedId ? 'text-primary-dark' : 'text-text'}`}>{l.title}</p>
-                    <p className="text-xs text-muted mt-0.5">
-                      {l.word_count.toLocaleString()} words · {new Date((l.created_at || 0) * 1000).toLocaleDateString()}
-                    </p>
-                  </button>
+                  <StaggerItem key={l.id}>
+                    <button
+                      onClick={() => selectLecture(l.id)}
+                      className={`w-full text-left px-3.5 py-3 rounded-lg transition-colors ${
+                        l.id === selectedId ? 'bg-primary-light' : 'hover:bg-surface2'
+                      }`}
+                    >
+                      <p className={`text-sm font-serif font-semibold truncate ${l.id === selectedId ? 'text-primary-dark' : 'text-text'}`}>{l.title}</p>
+                      <p className="text-xs text-muted mt-0.5">
+                        {l.word_count.toLocaleString()} words · {new Date((l.created_at || 0) * 1000).toLocaleDateString()}
+                      </p>
+                    </button>
+                  </StaggerItem>
                 ))
               )}
-            </div>
+            </StaggerGroup>
           </div>
 
           {/* Conversation */}
@@ -154,12 +157,20 @@ export function Chat() {
               )}
               {msgs.map((m, i) =>
                 m.role === 'user' ? (
-                  <p key={i} className="label-caps text-muted">{m.text}</p>
+                  <motion.p
+                    key={i}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="label-caps text-muted"
+                  >
+                    {m.text}
+                  </motion.p>
                 ) : (
-                  <div key={i}>
+                  <motion.div key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                     <p className="label-caps text-primary mb-1.5">Lectra</p>
                     <p className="text-[15px] text-text leading-relaxed">{m.text}</p>
-                  </div>
+                  </motion.div>
                 ),
               )}
               {busy && msgs[msgs.length - 1]?.text === '' && (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import {
   AlertTriangle,
   BarChart2,
@@ -7,6 +8,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import { api, type Lecture, type LectureSummary } from '../lib/api';
+import { Reveal, StaggerGroup, StaggerItem } from '../components/Reveal';
+import { NumberTicker } from '../components/ui/number-ticker';
 
 type LoadedLecture = LectureSummary & { detail?: Lecture };
 
@@ -128,7 +131,7 @@ export function Analytics() {
 
   return (
     <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between mb-10">
+      <Reveal className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between mb-10">
         <div>
           <h1 className="font-serif text-4xl font-semibold tracking-tight text-text mb-2">Learning analytics</h1>
           <p className="text-sm text-muted">Computed from saved lectures and generated study artifacts.</p>
@@ -139,7 +142,7 @@ export function Analytics() {
         >
           <Download className="w-4 h-4" /> Export report
         </button>
-      </div>
+      </Reveal>
 
       {analytics.total === 0 ? (
         <div className="rounded-lg border border-dashed border-border2 bg-surface p-12 text-center">
@@ -151,43 +154,52 @@ export function Analytics() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-8 mb-12 pb-10 border-b border-border">
-            <div>
+          <StaggerGroup className="grid grid-cols-3 gap-8 mb-12 pb-10 border-b border-border">
+            <StaggerItem>
               <p className="label-caps text-muted mb-2">Repository coverage</p>
-              <p className="font-serif text-4xl font-semibold text-text mb-1">{pct(analytics.notes + analytics.quizzes + analytics.evaluations, analytics.total * 3)}%</p>
+              <p className="font-serif text-4xl font-semibold text-text mb-1">
+                <NumberTicker value={pct(analytics.notes + analytics.quizzes + analytics.evaluations, analytics.total * 3)} className="font-serif text-4xl font-semibold text-text tabular-nums" />%
+              </p>
               <p className="text-sm text-muted">{analytics.total} lectures tracked</p>
-            </div>
-            <div>
+            </StaggerItem>
+            <StaggerItem>
               <p className="label-caps text-muted mb-2">Study load</p>
-              <p className="font-serif text-4xl font-semibold text-text mb-1">{analytics.avgStudyMinutes || 0}m</p>
+              <p className="font-serif text-4xl font-semibold text-text mb-1">
+                <NumberTicker value={analytics.avgStudyMinutes || 0} className="font-serif text-4xl font-semibold text-text tabular-nums" />m
+              </p>
               <p className="text-sm text-muted">Average estimated study time</p>
-            </div>
-            <div>
+            </StaggerItem>
+            <StaggerItem>
               <p className="label-caps text-muted mb-2">Difficulty</p>
               <p className="font-serif text-4xl font-semibold text-text mb-1">
                 {analytics.avgDifficulty >= 2.6 ? 'Hard' : analytics.avgDifficulty >= 1.6 ? 'Moderate' : 'Easy'}
               </p>
               <p className="text-sm text-muted">{analytics.evaluations} evaluated lectures</p>
-            </div>
-          </div>
+            </StaggerItem>
+          </StaggerGroup>
 
           <div className="grid md:grid-cols-2 gap-14 mb-12">
-            <div>
+            <Reveal delay={0.1}>
               <h3 className="font-serif text-xl font-semibold text-text mb-6">Generated artifact coverage</h3>
               <div className="space-y-5">
                 {analytics.artifactBars.map((bar) => (
                   <div key={bar.label} className="flex items-center gap-4">
                     <span className="w-20 shrink-0 text-sm text-muted">{bar.label}</span>
                     <div className="h-1.5 flex-1 rounded-full bg-surface2 overflow-hidden">
-                      <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${bar.value}%` }} />
+                      <motion.div
+                        className="h-full bg-primary rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${bar.value}%` }}
+                        transition={{ duration: 0.7, ease: [0.21, 0.47, 0.32, 0.98] }}
+                      />
                     </div>
                     <span className="w-10 text-right text-sm font-semibold text-text">{bar.value}%</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </Reveal>
 
-            <div>
+            <Reveal delay={0.15}>
               <h3 className="font-serif text-xl font-semibold text-text mb-6">Top evaluated topics</h3>
               {analytics.topics.length === 0 ? (
                 <div className="rounded-lg bg-warning-light p-4 text-sm text-text">
@@ -199,9 +211,11 @@ export function Analytics() {
                     <div key={topic.topic} className="flex items-center gap-4">
                       <span className="w-36 shrink-0 truncate text-sm text-muted">{topic.topic}</span>
                       <div className="h-1.5 flex-1 rounded-full bg-surface2 overflow-hidden">
-                        <div
-                          className="h-full bg-accent rounded-full transition-all duration-500"
-                          style={{ width: `${pct(topic.count, analytics.topics[0]?.count || 1)}%` }}
+                        <motion.div
+                          className="h-full bg-accent rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct(topic.count, analytics.topics[0]?.count || 1)}%` }}
+                          transition={{ duration: 0.7, ease: [0.21, 0.47, 0.32, 0.98] }}
                         />
                       </div>
                       <span className="w-10 text-right text-sm font-semibold text-text">{pct(topic.count, analytics.total)}%</span>
@@ -209,10 +223,10 @@ export function Analytics() {
                   ))}
                 </div>
               )}
-            </div>
+            </Reveal>
           </div>
 
-          <div>
+          <Reveal delay={0.2}>
             <h3 className="font-serif text-xl font-semibold text-text mb-5">Lecture detail matrix</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -240,7 +254,7 @@ export function Analytics() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </Reveal>
         </>
       )}
     </div>
