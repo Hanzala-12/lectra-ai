@@ -4,7 +4,6 @@ import {
   BarChart2,
   CheckCircle2,
   Download,
-  Loader2,
   XCircle,
 } from 'lucide-react';
 import { api, type Lecture, type LectureSummary } from '../lib/api';
@@ -116,11 +115,7 @@ export function Analytics() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-20 text-muted">
-        <Loader2 className="w-5 h-5 animate-spin" /> Loading analytics…
-      </div>
-    );
+    return <AnalyticsSkeleton />;
   }
 
   if (err) {
@@ -248,6 +243,53 @@ export function Analytics() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Content-shaped placeholder instead of a spinner — mirrors the real page's
+// stat row / bar-chart columns / table so nothing visually jumps when data
+// arrives.
+const bar = 'animate-pulse rounded bg-surface2';
+function AnalyticsSkeleton() {
+  return (
+    <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
+      <div className="flex flex-col gap-2 mb-10">
+        <div className={`${bar} h-10 w-72`} />
+        <div className={`${bar} h-4 w-96 max-w-full`} />
+      </div>
+
+      <div className="grid grid-cols-3 gap-8 mb-12 pb-10 border-b border-border">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="space-y-2">
+            <div className={`${bar} h-3 w-24`} />
+            <div className={`${bar} h-9 w-16`} />
+            <div className={`${bar} h-3 w-32`} />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-14 mb-12">
+        {Array.from({ length: 2 }).map((_, col) => (
+          <div key={col} className="space-y-5">
+            <div className={`${bar} h-5 w-48`} />
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <div className={`${bar} h-3 w-20 shrink-0`} />
+                <div className={`${bar} h-1.5 flex-1 rounded-full`} />
+                <div className={`${bar} h-3 w-8 shrink-0`} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-4">
+        <div className={`${bar} h-5 w-56`} />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={`${bar} h-8 w-full`} />
+        ))}
+      </div>
     </div>
   );
 }

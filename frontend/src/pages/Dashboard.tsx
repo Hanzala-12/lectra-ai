@@ -5,7 +5,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
-  Loader2,
   UploadCloud,
 } from 'lucide-react';
 import { api, getToken, type LectureSummary, type Student } from '../lib/api';
@@ -72,11 +71,7 @@ export function Dashboard() {
   }, [lectures]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-20 text-muted">
-        <Loader2 className="w-5 h-5 animate-spin" /> Loading dashboard…
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   if (err) {
@@ -196,6 +191,51 @@ export function Dashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Content-shaped placeholder instead of a spinner — mirrors the real page's
+// hero/stats/two-column layout so nothing visually jumps when data arrives.
+const bar = 'animate-pulse rounded bg-surface2';
+function DashboardSkeleton() {
+  return (
+    <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
+      <div className="flex flex-col gap-4 mb-10">
+        <div className={`${bar} h-3 w-32`} />
+        <div className={`${bar} h-10 w-3/4 max-w-xl`} />
+        <div className={`${bar} h-4 w-64 mt-1`} />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-12 pb-10 border-b border-border">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="space-y-2.5">
+            <div className={`${bar} h-3 w-16`} />
+            <div className={`${bar} h-9 w-10`} />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-[1fr_320px] gap-14">
+        <div className="space-y-5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between gap-4 py-4 border-b border-border">
+              <div className="space-y-2 flex-1 min-w-0">
+                <div className={`${bar} h-4 w-2/3`} />
+                <div className={`${bar} h-3 w-1/2`} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="bg-surface rounded-lg p-6 space-y-5">
+          <div className={`${bar} w-32 h-32 rounded-full mx-auto`} />
+          <div className="space-y-2.5">
+            <div className={`${bar} h-4 w-full`} />
+            <div className={`${bar} h-4 w-5/6`} />
+            <div className={`${bar} h-4 w-4/6`} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

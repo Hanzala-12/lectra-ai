@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, UploadCloud, Loader2, Trash2, Mic } from 'lucide-react';
+import { Search, UploadCloud, Trash2, Mic } from 'lucide-react';
 import { api, type LectureSummary } from '../lib/api';
 
 function formatDuration(seconds?: number) {
@@ -52,7 +52,7 @@ export function Library() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-muted justify-center py-16"><Loader2 className="w-5 h-5 animate-spin" /> Loading…</div>
+        <LibrarySkeleton />
       ) : err ? (
         <p className="text-center text-muted py-16">{err}</p>
       ) : filtered.length === 0 && q ? (
@@ -94,6 +94,29 @@ export function Library() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Content-shaped placeholder instead of a spinner — mirrors the real card
+// grid below (label line, two-line title, meta line, badge row) so the page
+// doesn't visually jump when data arrives.
+const bar = 'animate-pulse rounded bg-surface2';
+function LibrarySkeleton() {
+  return (
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="rounded-lg bg-surface p-5 flex flex-col gap-3">
+          <div className={`${bar} h-3 w-20`} />
+          <div className={`${bar} h-5 w-4/5`} />
+          <div className={`${bar} h-5 w-2/5`} />
+          <div className={`${bar} h-3 w-1/2 mt-1`} />
+          <div className="flex gap-1.5 mt-1">
+            <div className={`${bar} h-5 w-14 rounded-full`} />
+            <div className={`${bar} h-5 w-14 rounded-full`} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
