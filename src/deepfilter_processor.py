@@ -11,6 +11,52 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _shim_torchaudio_backend():
+    """Newer torchaudio (2.x on recent Python - e.g. Kaggle's preinstalled
+    build) dropped the old torchaudio.backend.common.AudioMetaData class
+    entirely. df.io (deepfilternet's own audio I/O module) still does
+    `from torchaudio.backend.common import AudioMetaData` at import time, so
+    without this the whole `df` package fails to import with
+    ModuleNotFoundError: No module named 'torchaudio.backend' - not a real
+    missing dependency, just an API-shape mismatch. AudioMetaData is a
+    plain data holder (sample_rate/num_frames/num_channels/bits_per_sample/
+    encoding), stable across torchaudio's history even as its location
+    moved - safe to stand in for. No-ops if the real module still exists.
+    Same "compat patch before the real import" pattern already used in
+    metricgan_processor.py for Windows/huggingface_hub."""
+    import sys
+    import types
+
+    try:
+        import torchaudio.backend.common  # noqa: F401
+
+        return  # real one still there - nothing to shim
+    except ModuleNotFoundError:
+        pass
+
+    class AudioMetaData:
+        def __init__(
+            self,
+            sample_rate,
+            num_frames,
+            num_channels,
+            bits_per_sample=0,
+            encoding="",
+        ):
+            self.sample_rate = sample_rate
+            self.num_frames = num_frames
+            self.num_channels = num_channels
+            self.bits_per_sample = bits_per_sample
+            self.encoding = encoding
+
+    common_mod = types.ModuleType("torchaudio.backend.common")
+    common_mod.AudioMetaData = AudioMetaData
+    backend_mod = types.ModuleType("torchaudio.backend")
+    backend_mod.common = common_mod
+    sys.modules["torchaudio.backend"] = backend_mod
+    sys.modules["torchaudio.backend.common"] = common_mod
+
+
 class DeepFilterProcessor:
     """DeepFilterNet-based noise reduction"""
 
@@ -49,6 +95,8 @@ class DeepFilterProcessor:
         """Load DeepFilterNet model"""
         try:
             import os
+
+            _shim_torchaudio_backend()
             from df.enhance import init_df, enhance
             from df import config
 
@@ -64,9 +112,17 @@ class DeepFilterProcessor:
             df_cache_dir = os.path.abspath(df_cache_dir)
             os.makedirs(df_cache_dir, exist_ok=True)
 
-            # Load model
+            # If nothing's been downloaded there yet (fresh clone / fresh
+            # environment - e.g. gpu_tunnel/'s Kaggle worker, which starts
+            # from a clean checkout every session), model_base_dir pointing
+            # at an empty directory makes init_df raise instead of
+            # downloading - fall back to its own default cache + download,
+            # same "fetch on first use" pattern this project already uses
+            # for Piper/pyannote's models.
+            has_cached_model = os.path.exists(os.path.join(df_cache_dir, "config.ini"))
+
             self.model, self.df_state, _ = init_df(
-                model_base_dir=df_cache_dir,
+                model_base_dir=df_cache_dir if has_cached_model else None,
                 post_filter=self.post_filter,
                 config_allow_defaults=True,
             )
