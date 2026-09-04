@@ -3,9 +3,15 @@ LLM Client — provider abstraction for the NLP/LLM half of the system
 (notes, quiz, schedule, evaluation, RAG chat).
 
 Default provider: OpenRouter (OpenAI-compatible chat completions API).
-The API key is read from the environment (OPENROUTER_API_KEY) and can be added
-later — until then `is_configured()` returns False and callers return a clean
-"LLM not configured" response instead of crashing.
+The primary API key is read from the environment (OPENROUTER_API_KEY) and can
+be added later — until then `is_configured()` returns False and callers
+return a clean "LLM not configured" response instead of crashing.
+
+Optional fallback keys (OPENROUTER_API_KEY_2, _3, ...) let the client rotate
+to a different account automatically when one is out of credits (402) or
+invalid (401), or when a rate limit (429) persists through the existing
+retry-with-backoff on the current key — instead of failing the whole
+request just because one specific key/account is temporarily unusable.
 """
 
 import os
@@ -20,7 +26,45 @@ class LLMNotConfigured(Exception):
     """Raised when an LLM call is attempted without an API key."""
 
 
+# Transient — worth retrying the SAME key with backoff first.
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+# Key/account-specific — retrying the same key is pointless, move on to the
+# next configured key immediately (no backoff wasted on a key that's simply
+# out of credits or revoked).
+KEY_ROTATE_STATUS_CODES = {401, 402}
+
+
+def _collect_api_keys(explicit: Optional[str]) -> List[str]:
+    """Primary key first (explicit arg, then OPENROUTER_API_KEY / LLM_API_KEY),
+    followed by any OPENROUTER_API_KEY_2.. OPENROUTER_API_KEY_9 fallbacks that
+    are set. Order is the rotation order. Duplicates removed, empties dropped.
+
+    An explicit `explicit` arg (as tests pass, e.g. api_key="fake-key") is
+    authoritative and used alone, with NO env-based fallback collection -
+    mirrors how the single-key version worked (explicit overrides env
+    entirely) and keeps tests isolated from whatever real fallback keys
+    happen to be sitting in a loaded .env (backend.py's load_dotenv() runs
+    at import time, before any test gets a chance to construct a client).
+    """
+    if explicit:
+        return [explicit]
+    keys = []
+    primary = os.getenv("OPENROUTER_API_KEY") or os.getenv("LLM_API_KEY")
+    if primary:
+        keys.append(primary)
+    for i in range(2, 10):
+        extra = os.getenv(f"OPENROUTER_API_KEY_{i}")
+        if extra:
+            keys.append(extra)
+    # de-dupe while preserving order (a key pasted into both slots shouldn't
+    # be tried twice)
+    seen = set()
+    unique = []
+    for k in keys:
+        if k not in seen:
+            seen.add(k)
+            unique.append(k)
+    return unique
 
 
 class LLMClient:
@@ -32,10 +76,11 @@ class LLMClient:
         timeout: float = 60.0,
         max_retries: int = 2,
     ):
-        # Read provider settings from env so the key can be dropped in later.
-        self.api_key = (
-            api_key or os.getenv("OPENROUTER_API_KEY") or os.getenv("LLM_API_KEY")
-        )
+        # Read provider settings from env so the key(s) can be dropped in later.
+        self.api_keys = _collect_api_keys(api_key)
+        # Kept for backwards compatibility (is_configured(), anything reading
+        # .api_key directly) — always the first/primary key.
+        self.api_key = self.api_keys[0] if self.api_keys else None
         self.base_url = (
             base_url
             or os.getenv("OPENROUTER_BASE_URL")
@@ -50,7 +95,7 @@ class LLMClient:
         self.max_retries = max_retries
 
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.api_keys)
 
     # -----------------------------------------------------------------
     def chat(
@@ -60,7 +105,8 @@ class LLMClient:
         max_tokens: int = 1500,
         json_mode: bool = False,
     ) -> str:
-        """Send a chat-completion request and return the assistant text."""
+        """Send a chat-completion request and return the assistant text.
+        Rotates across every configured API key before giving up."""
         if not self.is_configured():
             raise LLMNotConfigured(
                 "LLM is not configured. Add OPENROUTER_API_KEY to your .env file."
@@ -78,53 +124,99 @@ class LLMClient:
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            # OpenRouter optional attribution headers
-            "HTTP-Referer": os.getenv("APP_URL", "http://localhost"),
-            "X-Title": "Lectra AI",
-        }
+        last_error: Optional[BaseException] = None
 
-        for attempt in range(self.max_retries + 1):
-            is_last_attempt = attempt == self.max_retries
-            try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    resp = client.post(
-                        f"{self.base_url}/chat/completions",
-                        headers=headers,
-                        json=payload,
+        for key_index, api_key in enumerate(self.api_keys):
+            is_last_key = key_index == len(self.api_keys) - 1
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                # OpenRouter optional attribution headers
+                "HTTP-Referer": os.getenv("APP_URL", "http://localhost"),
+                "X-Title": "Lectra AI",
+            }
+
+            for attempt in range(self.max_retries + 1):
+                is_last_attempt = attempt == self.max_retries
+                try:
+                    with httpx.Client(timeout=self.timeout) as client:
+                        resp = client.post(
+                            f"{self.base_url}/chat/completions",
+                            headers=headers,
+                            json=payload,
+                        )
+                except (httpx.TimeoutException, httpx.TransportError) as e:
+                    last_error = e
+                    if is_last_attempt:
+                        break  # exhausted retries on this key -> try next key
+                    wait = min(2**attempt, 10)
+                    logger.warning(
+                        f"LLM request failed ({e}); retrying in {wait}s "
+                        f"(key {key_index + 1}/{len(self.api_keys)}, "
+                        f"attempt {attempt + 1}/{self.max_retries})"
                     )
-            except (httpx.TimeoutException, httpx.TransportError) as e:
-                if is_last_attempt:
-                    logger.error(f"LLM request failed: {e}")
+                    _time.sleep(wait)
+                    continue
+
+                if resp.status_code in KEY_ROTATE_STATUS_CODES:
+                    last_error = httpx.HTTPStatusError(
+                        f"key {key_index + 1} rejected: HTTP {resp.status_code}",
+                        request=resp.request,
+                        response=resp,
+                    )
+                    if not is_last_key:
+                        logger.warning(
+                            f"LLM key {key_index + 1}/{len(self.api_keys)} got "
+                            f"HTTP {resp.status_code} (out of credits or invalid) "
+                            f"- rotating to the next key"
+                        )
+                    break  # no point retrying the same key on 401/402
+
+                if resp.status_code in RETRYABLE_STATUS_CODES and not is_last_attempt:
+                    wait = min(float(resp.headers.get("Retry-After", 2**attempt)), 10)
+                    logger.warning(
+                        f"LLM request got HTTP {resp.status_code}; retrying in "
+                        f"{wait:.1f}s (key {key_index + 1}/{len(self.api_keys)}, "
+                        f"attempt {attempt + 1}/{self.max_retries})"
+                    )
+                    _time.sleep(wait)
+                    continue
+
+                if resp.status_code in RETRYABLE_STATUS_CODES and is_last_attempt:
+                    # Retries exhausted on this key too - worth trying the next
+                    # key in case it has separate rate-limit headroom, rather
+                    # than failing outright.
+                    last_error = httpx.HTTPStatusError(
+                        f"key {key_index + 1} exhausted retries: HTTP {resp.status_code}",
+                        request=resp.request,
+                        response=resp,
+                    )
+                    break
+
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    # A genuine, non-transient, non-auth client error (bad
+                    # request, etc.) - rotating keys wouldn't fix this and
+                    # would just mask the real problem. Fail immediately.
+                    logger.error(
+                        f"LLM HTTP error {e.response.status_code}: {e.response.text[:300]}"
+                    )
                     raise
-                wait = min(2**attempt, 10)
-                logger.warning(
-                    f"LLM request failed ({e}); retrying in {wait}s "
-                    f"(attempt {attempt + 1}/{self.max_retries})"
-                )
-                _time.sleep(wait)
-                continue
+                data = resp.json()
+                return data["choices"][0]["message"]["content"].strip()
 
-            if resp.status_code in RETRYABLE_STATUS_CODES and not is_last_attempt:
-                wait = min(float(resp.headers.get("Retry-After", 2**attempt)), 10)
-                logger.warning(
-                    f"LLM request got HTTP {resp.status_code}; retrying in {wait:.1f}s "
-                    f"(attempt {attempt + 1}/{self.max_retries})"
-                )
-                _time.sleep(wait)
-                continue
+            # Reaching here means this key's attempts are exhausted (network
+            # error, 401/402, or a persistent retryable status) - loop
+            # continues to the next key, if any.
 
-            try:
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                logger.error(
-                    f"LLM HTTP error {e.response.status_code}: {e.response.text[:300]}"
-                )
-                raise
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
+        # Every configured key failed.
+        if last_error:
+            logger.error(
+                f"LLM request failed on all {len(self.api_keys)} configured key(s)"
+            )
+            raise last_error
+        raise RuntimeError("LLM request failed on all configured keys")
 
     def complete(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
         messages = []
