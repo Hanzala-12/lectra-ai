@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Send, Sparkles, UploadCloud } from 'lucide-react';
+import { Loader2, Search, Send, Sparkles, UploadCloud } from 'lucide-react';
 import { api, type ChatResponse, type LectureSummary } from '../lib/api';
 
 type Msg = { role: 'user' | 'ai'; text: string };
@@ -12,6 +12,7 @@ export function Chat() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
 
   useEffect(() => {
     api.library().then((r) => {
@@ -33,13 +34,13 @@ export function Chat() {
   };
 
   const send = async () => {
-    const q = input.trim();
-    if (!q || busy || !selectedId) return;
+    const question = input.trim();
+    if (!question || busy || !selectedId) return;
     setInput('');
-    setMsgs((m) => [...m, { role: 'user', text: q }]);
+    setMsgs((m) => [...m, { role: 'user', text: question }]);
     setBusy(true);
     try {
-      const r: ChatResponse = await api.chat(selectedId, q);
+      const r: ChatResponse = await api.chat(selectedId, question);
       setMsgs((m) => [...m, { role: 'ai', text: r.answer }]);
     } catch (e: any) {
       setMsgs((m) => [...m, { role: 'ai', text: `⚠️ ${e.message}` }]);
@@ -57,6 +58,7 @@ export function Chat() {
   }
 
   const selected = lectures.find((l) => l.id === selectedId);
+  const filtered = lectures.filter((l) => l.title.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
@@ -78,28 +80,60 @@ export function Chat() {
       ) : (
         <div className="grid md:grid-cols-[260px_1fr] gap-6">
           {/* Lecture list */}
-          <div className="space-y-1 md:sticky md:top-6 md:self-start">
-            {lectures.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => selectLecture(l.id)}
-                className={`w-full text-left px-3.5 py-3 rounded-lg transition-colors ${
-                  l.id === selectedId ? 'bg-primary-light' : 'hover:bg-surface2'
-                }`}
-              >
-                <p className={`text-sm font-serif font-semibold truncate ${l.id === selectedId ? 'text-primary-dark' : 'text-text'}`}>{l.title}</p>
-                <p className="text-xs text-muted mt-0.5">
-                  {l.word_count.toLocaleString()} words · {new Date((l.created_at || 0) * 1000).toLocaleDateString()}
-                </p>
-              </button>
-            ))}
+          <div className="space-y-3 md:sticky md:top-6 md:self-start">
+            {/* Always-visible entry point to add a new lecture without
+                leaving Chat — processing still takes real minutes (the
+                pipeline has to run), so this deep-links to the Upload flow
+                rather than pretending to attach it instantly. */}
+            <Link
+              to="/app/upload"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg border border-dashed border-border2 text-sm font-medium text-muted hover:text-primary hover:border-primary/40 transition-colors"
+            >
+              <UploadCloud className="w-4 h-4 shrink-0" /> Upload a new lecture
+            </Link>
+
+            {lectures.length > 4 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted w-3.5 h-3.5" />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search lectures…"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-surface text-sm outline-none focus:border-primary transition-colors"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              {filtered.length === 0 ? (
+                <p className="text-xs text-muted px-3.5 py-2">No lectures match "{q}".</p>
+              ) : (
+                filtered.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => selectLecture(l.id)}
+                    className={`w-full text-left px-3.5 py-3 rounded-lg transition-colors ${
+                      l.id === selectedId ? 'bg-primary-light' : 'hover:bg-surface2'
+                    }`}
+                  >
+                    <p className={`text-sm font-serif font-semibold truncate ${l.id === selectedId ? 'text-primary-dark' : 'text-text'}`}>{l.title}</p>
+                    <p className="text-xs text-muted mt-0.5">
+                      {l.word_count.toLocaleString()} words · {new Date((l.created_at || 0) * 1000).toLocaleDateString()}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
 
           {/* Conversation */}
           <div className="rounded-lg bg-surface p-6 flex flex-col">
             {selected && (
-              <div className="mb-5 pb-5 border-b border-border">
-                <h2 className="font-serif text-xl font-semibold text-text">{selected.title}</h2>
+              <div className="mb-5 pb-5 border-b border-border flex items-center justify-between gap-3">
+                <h2 className="font-serif text-xl font-semibold text-text truncate">{selected.title}</h2>
+                <Link to={`/app/lecture/${selected.id}`} className="text-xs font-medium text-primary hover:text-primary-dark shrink-0">
+                  Open full workspace →
+                </Link>
               </div>
             )}
 

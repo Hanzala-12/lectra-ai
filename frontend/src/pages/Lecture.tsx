@@ -438,6 +438,11 @@ function ChatTab({ id, history }: { id: string; history: { question: string; ans
   };
   return (
     <div className="space-y-3">
+      <div className="flex justify-end">
+        <Link to="/app/chat" className={btnGhost}>
+          <MessageSquare className="w-3.5 h-3.5" /> Chat with a different lecture
+        </Link>
+      </div>
       <div className={`${card} min-h-[40vh] max-h-[55vh] overflow-y-auto space-y-4`}>
         {msgs.length === 0 && (
           <div className="text-center py-12">
