@@ -58,7 +58,7 @@ export function AppLayout() {
         {/* Sidebar — same flat tone as the page, separated only by a hairline
             border. Depth comes from the surface cards, not the chrome. */}
         <aside className="w-64 shrink-0 hidden md:flex md:flex-col py-7 px-5 min-h-screen sticky top-0 border-r border-border">
-          <Link to="/" className="flex items-center gap-2.5 group px-1 mb-8">
+          <Link to="/app/dashboard" className="flex items-center gap-2.5 group px-1 mb-8">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white transition-transform group-hover:scale-105">
               <GraduationCap className="w-4 h-4" />
             </div>
@@ -127,7 +127,7 @@ export function AppLayout() {
         {/* Mobile Nav Header */}
         <div className="md:hidden w-full flex flex-col sticky top-0 bg-bg z-20 border-b border-border">
           <div className="py-4 px-6 flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-2 group">
+            <Link to="/app/dashboard" className="flex items-center gap-2 group">
               <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-white">
                 <GraduationCap className="w-3.5 h-3.5" />
               </div>
