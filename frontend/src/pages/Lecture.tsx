@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
-  type Schedule, type Evaluation, type ChatResponse, type AudioFile,
+  type Schedule, type Evaluation, type AudioFile,
 } from '../lib/api';
 
 type Tab = 'transcript' | 'notes' | 'quiz' | 'schedule' | 'evaluation' | 'chat';
@@ -404,20 +404,22 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
 
 // ----------------------------------------------------------------- Notes
 function NotesTab({ id, initial }: { id: string; initial: string | null }) {
-  const [notes, setNotes] = useState(initial);
-  const [loading, setLoading] = useState(false);
+  const [notes, setNotes] = useState(initial ?? '');
+  const [streaming, setStreaming] = useState(false);
   const [err, setErr] = useState('');
   const gen = (refresh = false) => {
-    setLoading(true); setErr('');
-    api.notes(id, refresh).then((r) => setNotes(r.notes)).catch((e) => setErr(e.message)).finally(() => setLoading(false));
+    setStreaming(true); setErr(''); setNotes('');
+    api.notesStream(id, (delta) => setNotes((n) => n + delta), refresh)
+      .catch((e) => setErr(e.message))
+      .finally(() => setStreaming(false));
   };
   useEffect(() => { if (!initial) gen(); }, []); // auto-generate first time
-  if (loading) return <Spinner label="Generating study notes…" />;
+  if (streaming && !notes) return <Spinner label="Generating study notes…" />;
   if (err) return <div className="space-y-3"><ErrorBox msg={err} /><button className={btn} onClick={() => gen()}>Retry</button></div>;
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <button className={btnGhost} onClick={() => gen(true)}>
+        <button className={btnGhost} onClick={() => gen(true)} disabled={streaming}>
           <RefreshCw className="w-3.5 h-3.5" /> Regenerate
         </button>
       </div>
@@ -659,15 +661,27 @@ function ChatTab({ id, history }: { id: string; history: { question: string; ans
   );
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const appendToLastMsg = (delta: string) => {
+    setMsgs((m) => {
+      const next = [...m];
+      next[next.length - 1] = { role: 'ai', text: next[next.length - 1].text + delta };
+      return next;
+    });
+  };
   const send = async () => {
     const q = input.trim();
     if (!q || busy) return;
-    setInput(''); setMsgs((m) => [...m, { role: 'user', text: q }]); setBusy(true);
+    setInput('');
+    setMsgs((m) => [...m, { role: 'user', text: q }, { role: 'ai', text: '' }]);
+    setBusy(true);
     try {
-      const r: ChatResponse = await api.chat(id, q);
-      setMsgs((m) => [...m, { role: 'ai', text: r.answer }]);
+      await api.chatStream(id, q, appendToLastMsg);
     } catch (e: any) {
-      setMsgs((m) => [...m, { role: 'ai', text: `⚠️ ${e.message}` }]);
+      setMsgs((m) => {
+        const next = [...m];
+        next[next.length - 1] = { role: 'ai', text: `⚠️ ${e.message}` };
+        return next;
+      });
     } finally { setBusy(false); }
   };
   return (
@@ -696,7 +710,7 @@ function ChatTab({ id, history }: { id: string; history: { question: string; ans
             </div>
           ),
         )}
-        {busy && <Spinner label="Thinking…" />}
+        {busy && msgs[msgs.length - 1]?.text === '' && <Spinner label="Thinking…" />}
       </div>
       <div className="flex gap-2">
         <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()}

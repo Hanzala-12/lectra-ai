@@ -56,6 +56,59 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Consumes a `data: {...}\n\n`-formatted SSE POST response (native
+// EventSource can't be used here — it's GET-only and can't carry an
+// Authorization header or a JSON body). Calls onDelta as text arrives and
+// resolves with whatever fields the server's final `{done: true, ...}`
+// event carried (e.g. `sources` for chat, `cached` for notes).
+async function reqStream<TDone extends Record<string, unknown>>(
+  path: string,
+  options: RequestInit,
+  onDelta: (text: string) => void,
+): Promise<TDone> {
+  const token = getToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(buildUrl(path), { headers, ...options });
+  if (!res.ok || !res.body) {
+    let detail = `Request failed (${res.status})`;
+    try {
+      const body = await res.json();
+      detail = body.detail || body.error || detail;
+    } catch {
+      /* ignore — not JSON, keep the generic message */
+    }
+    if (res.status === 401) clearToken();
+    const err = new Error(detail) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let boundary: number;
+    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+      const rawEvent = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const line = rawEvent.split('\n').find((l) => l.startsWith('data: '));
+      if (!line) continue;
+      const event = JSON.parse(line.slice('data: '.length));
+      if (event.error) throw new Error(event.error);
+      if (event.delta) onDelta(event.delta);
+      if (event.done) return event as TDone;
+    }
+  }
+  throw new Error('Stream ended without a completion event');
+}
+
 // ---------- types ----------
 export type LectureSummary = {
   id: string;
@@ -187,6 +240,12 @@ export const api = {
       `/api/lecture/${id}/notes?refresh=${refresh}`,
       { method: 'POST' },
     ),
+  notesStream: (id: string, onDelta: (text: string) => void, refresh = false) =>
+    reqStream<{ done: true; cached: boolean }>(
+      `/api/lecture/${id}/notes/stream?refresh=${refresh}`,
+      { method: 'POST' },
+      onDelta,
+    ),
 
   quiz: (id: string, num_questions = 5, refresh = false) =>
     req<{ quiz: QuizQuestion[]; quiz_id: string; cached: boolean }>(
@@ -226,6 +285,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ question, top_k }),
     }),
+  chatStream: (
+    id: string,
+    question: string,
+    onDelta: (text: string) => void,
+    top_k = 4,
+  ) =>
+    reqStream<{ done: true; sources: ChatResponse['sources'] }>(
+      `/api/lecture/${id}/chat/stream`,
+      { method: 'POST', body: JSON.stringify({ question, top_k }) },
+      onDelta,
+    ),
 
   // ---------- auth ----------
   signup: async (username: string, password: string, name?: string, email?: string) => {

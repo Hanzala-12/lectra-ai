@@ -91,6 +91,16 @@ class FakeLLM:
     def complete(self, prompt, system=None, **kwargs):
         return "This is a fake LLM answer."
 
+    def chat(self, messages, **kwargs):
+        return "This is a fake LLM answer."
+
+    def chat_stream(self, messages, **kwargs):
+        """Mirrors chat()'s canned response, yielded word-by-word — enough
+        for streaming-route tests to assert both incremental delivery and
+        the same final text as the non-streaming path."""
+        for word in "This is a fake LLM answer.".split(" "):
+            yield word + " "
+
     def complete_json(self, prompt, system=None, **kwargs):
         # Route on a phrase unique to each study_tools prompt (careful:
         # "questions" alone is NOT unique — evaluate()'s JSON schema also

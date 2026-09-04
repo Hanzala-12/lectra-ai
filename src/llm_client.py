@@ -218,6 +218,104 @@ class LLMClient:
             raise last_error
         raise RuntimeError("LLM request failed on all configured keys")
 
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.3,
+        max_tokens: int = 1500,
+    ):
+        """Like chat(), but yields text deltas as they arrive instead of
+        returning the full response at once.
+
+        Key rotation applies only to a rejected *connection* (401/402, or a
+        network error before any bytes came back) — safe to silently retry
+        the next key at that point since nothing has reached the caller yet.
+        Once a key's stream has actually started, a later failure raises
+        instead of silently retrying, since some content may already have
+        been yielded (and, for a chat/notes caller, already shown to a
+        person) — a transparent retry there would risk duplicated or
+        contradictory partial output.
+        """
+        if not self.is_configured():
+            raise LLMNotConfigured(
+                "LLM is not configured. Add OPENROUTER_API_KEY to your .env file."
+            )
+
+        import httpx
+        import json as _json
+
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+
+        last_error: Optional[BaseException] = None
+
+        for key_index, api_key in enumerate(self.api_keys):
+            is_last_key = key_index == len(self.api_keys) - 1
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": os.getenv("APP_URL", "http://localhost"),
+                "X-Title": "Lectra AI",
+            }
+            started = False
+            try:
+                with httpx.Client(timeout=self.timeout) as client:
+                    with client.stream(
+                        "POST",
+                        f"{self.base_url}/chat/completions",
+                        headers=headers,
+                        json=payload,
+                    ) as resp:
+                        if resp.status_code in KEY_ROTATE_STATUS_CODES or (
+                            resp.status_code in RETRYABLE_STATUS_CODES
+                        ):
+                            resp.read()  # drain so httpx doesn't warn on a closed stream
+                            last_error = httpx.HTTPStatusError(
+                                f"key {key_index + 1} rejected: HTTP {resp.status_code}",
+                                request=resp.request,
+                                response=resp,
+                            )
+                            if not is_last_key:
+                                logger.warning(
+                                    f"LLM stream key {key_index + 1}/{len(self.api_keys)} got "
+                                    f"HTTP {resp.status_code} before any content — rotating"
+                                )
+                            continue
+                        resp.raise_for_status()
+                        started = True
+                        for line in resp.iter_lines():
+                            if not line or not line.startswith("data: "):
+                                continue
+                            data = line[len("data: ") :]
+                            if data.strip() == "[DONE]":
+                                return
+                            chunk = _json.loads(data)
+                            delta = (
+                                chunk.get("choices", [{}])[0]
+                                .get("delta", {})
+                                .get("content")
+                            )
+                            if delta:
+                                yield delta
+                        return
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                if started:
+                    raise
+                last_error = e
+                continue
+
+        if last_error:
+            logger.error(
+                f"LLM stream failed on all {len(self.api_keys)} configured key(s)"
+            )
+            raise last_error
+        raise RuntimeError("LLM stream failed on all configured keys")
+
     def complete(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
         messages = []
         if system:

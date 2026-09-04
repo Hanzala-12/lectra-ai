@@ -27,8 +27,7 @@ def _prep(transcript: str) -> str:
 
 
 # ---------------------------------------------------------------- NOTES
-def generate_notes(transcript: str, llm) -> str:
-    """Return Markdown study notes (summary, key points, definitions, takeaways)."""
+def _notes_messages(transcript: str) -> List[Dict[str, str]]:
     system = (
         "You are an expert study assistant. Produce clear, well-structured study "
         "notes in Markdown from a lecture transcript. Be accurate and concise; do "
@@ -42,7 +41,23 @@ def generate_notes(transcript: str, llm) -> str:
         "## Takeaways / What to Remember\n\n"
         f"TRANSCRIPT:\n{_prep(transcript)}"
     )
-    return llm.complete(prompt, system=system, max_tokens=1800, temperature=0.3)
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": prompt},
+    ]
+
+
+def generate_notes(transcript: str, llm) -> str:
+    """Return Markdown study notes (summary, key points, definitions, takeaways)."""
+    return llm.chat(_notes_messages(transcript), max_tokens=1800, temperature=0.3)
+
+
+def generate_notes_stream(transcript: str, llm):
+    """Same prompt as generate_notes(), yielded token-by-token instead of
+    returned all at once."""
+    yield from llm.chat_stream(
+        _notes_messages(transcript), max_tokens=1800, temperature=0.3
+    )
 
 
 # ---------------------------------------------------------------- QUIZ

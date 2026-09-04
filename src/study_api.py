@@ -23,12 +23,14 @@ shape callers already rely on (lecture.quiz / lecture.schedule) is unchanged;
 storage underneath is what changed.
 """
 
+import json
 import logging
 import time
 import uuid
 from typing import List, Optional, Any
 
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from llm_client import get_llm, LLMNotConfigured
@@ -233,6 +235,46 @@ async def make_notes(
     return {"notes": notes, "cached": False}
 
 
+@router.post("/lecture/{lecture_id}/notes/stream")
+async def make_notes_stream(
+    lecture_id: str,
+    refresh: bool = False,
+    student_id: str = Depends(get_current_student),
+):
+    """Same behavior and caching as POST .../notes, but a freshly-generated
+    set of notes arrives incrementally. An already-cached set (refresh=false,
+    notes exist) streams back as a single immediate chunk, so the client's
+    handling code doesn't need two separate code paths for cached vs. fresh."""
+    rec = _lecture_or_404(lecture_id, student_id)
+
+    if rec.get("notes") and not refresh:
+        cached = rec["notes"]
+
+        def cached_stream():
+            yield _sse({"delta": cached})
+            yield _sse({"done": True, "cached": True})
+
+        return StreamingResponse(cached_stream(), media_type="text/event-stream")
+
+    llm = _require_llm()
+
+    def event_stream():
+        chunks: List[str] = []
+        try:
+            for delta in study_tools.generate_notes_stream(rec["transcript_text"], llm):
+                chunks.append(delta)
+                yield _sse({"delta": delta})
+        except Exception as e:
+            logger.error(f"Notes stream failed: {e}")
+            yield _sse({"error": str(e)})
+            return
+        notes = "".join(chunks)
+        get_repository().update(lecture_id, notes=notes)
+        yield _sse({"done": True, "cached": False})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.post("/lecture/{lecture_id}/quiz")
 async def make_quiz(
     lecture_id: str,
@@ -352,6 +394,28 @@ async def evaluate(
 
 
 # ----------------------------------------------------------------- RAG chat
+def _chat_messages_and_sources(rec: dict, question: str, top_k: int):
+    """Shared between the blocking and streaming chat routes so the two
+    prompts can't drift apart."""
+    engine = RagEngine.from_transcript(rec["transcript_text"])
+    passages = engine.retrieve(question, k=top_k)
+    context = build_context(passages)
+    system = (
+        "You are a helpful study assistant answering questions about a specific "
+        "lecture. Answer ONLY using the provided context passages. If the answer "
+        "is not in the context, say you couldn't find it in this lecture."
+    )
+    prompt = f"Context from the lecture:\n{context}\n\nQuestion: {question}\n\nAnswer:"
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": prompt},
+    ]
+    sources = [
+        {"text": p["text"][:300], "score": round(p["score"], 3)} for p in passages
+    ]
+    return messages, sources
+
+
 @router.post("/lecture/{lecture_id}/chat")
 async def chat(
     lecture_id: str,
@@ -361,31 +425,49 @@ async def chat(
     rec = _lecture_or_404(lecture_id, student_id)
     llm = _require_llm()
 
-    engine = RagEngine.from_transcript(rec["transcript_text"])
-    passages = engine.retrieve(body.question, k=body.top_k)
-    context = build_context(passages)
-
-    system = (
-        "You are a helpful study assistant answering questions about a specific "
-        "lecture. Answer ONLY using the provided context passages. If the answer "
-        "is not in the context, say you couldn't find it in this lecture."
-    )
-    prompt = (
-        f"Context from the lecture:\n{context}\n\n"
-        f"Question: {body.question}\n\nAnswer:"
-    )
-    answer = _run_llm(
-        llm.complete, prompt, system=system, max_tokens=800, temperature=0.3
-    )
+    messages, sources = _chat_messages_and_sources(rec, body.question, body.top_k)
+    answer = _run_llm(llm.chat, messages, max_tokens=800, temperature=0.3)
 
     # persist a short chat history
     history = rec.get("chat_history", [])
     history.append({"question": body.question, "answer": answer})
     get_repository().update(lecture_id, chat_history=history[-50:])
 
-    return {
-        "answer": answer,
-        "sources": [
-            {"text": p["text"][:300], "score": round(p["score"], 3)} for p in passages
-        ],
-    }
+    return {"answer": answer, "sources": sources}
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event)}\n\n"
+
+
+@router.post("/lecture/{lecture_id}/chat/stream")
+async def chat_stream(
+    lecture_id: str,
+    body: ChatRequest,
+    student_id: str = Depends(get_current_student),
+):
+    """Same behavior and persistence as POST .../chat, but the answer arrives
+    as it's generated instead of all at once. Auth, ownership, and RAG
+    retrieval all happen before the stream opens — only token generation
+    itself is streamed."""
+    rec = _lecture_or_404(lecture_id, student_id)
+    llm = _require_llm()
+    messages, sources = _chat_messages_and_sources(rec, body.question, body.top_k)
+
+    def event_stream():
+        chunks: List[str] = []
+        try:
+            for delta in llm.chat_stream(messages, max_tokens=800, temperature=0.3):
+                chunks.append(delta)
+                yield _sse({"delta": delta})
+        except Exception as e:
+            logger.error(f"Chat stream failed: {e}")
+            yield _sse({"error": str(e)})
+            return
+        answer = "".join(chunks)
+        history = rec.get("chat_history", [])
+        history.append({"question": body.question, "answer": answer})
+        get_repository().update(lecture_id, chat_history=history[-50:])
+        yield _sse({"done": True, "sources": sources})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

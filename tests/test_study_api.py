@@ -6,8 +6,10 @@ Isolation, the FakeLLM stand-in, and the `auth` fixture (a signed-up throwaway
 student + auth headers) all come from conftest.py.
 """
 
+import json
 import os
 import sys
+from typing import List
 
 sys.path.insert(0, os.path.dirname(__file__))  # tests/ itself, for `import conftest`
 
@@ -534,6 +536,111 @@ def test_chat(auth):
     rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
     assert len(rec["chat_history"]) == 1
     assert rec["chat_history"][0]["question"] == "What is it?"
+
+
+def _parse_sse(text: str) -> List[dict]:
+    """Parse a `data: {...}\\n\\n`-formatted SSE body into a list of events."""
+    events = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if line.startswith("data: "):
+            events.append(json.loads(line[len("data: ") :]))
+    return events
+
+
+def test_chat_stream(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        f"/api/lecture/{lec['id']}/chat/stream",
+        json={"question": "What is it?"},
+        headers=auth.headers,
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/event-stream")
+
+    events = _parse_sse(r.text)
+    deltas = [e["delta"] for e in events if "delta" in e]
+    final = [e for e in events if e.get("done")]
+
+    # Delivered as more than one chunk (FakeLLM.chat_stream yields word-by-
+    # word) — the actual point of streaming, not just a differently-shaped
+    # single blob.
+    assert len(deltas) > 1
+    assert "fake LLM answer" in "".join(deltas)
+    assert len(final) == 1
+    assert "sources" in final[0]
+
+    # Persisted exactly like the non-streaming endpoint
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert len(rec["chat_history"]) == 1
+    assert rec["chat_history"][0]["question"] == "What is it?"
+    assert "fake LLM answer" in rec["chat_history"][0]["answer"]
+
+
+def test_chat_stream_requires_auth(auth):
+    lec = _lecture(auth)
+    r = client.post(f"/api/lecture/{lec['id']}/chat/stream", json={"question": "hi"})
+    assert r.status_code == 401
+
+
+def test_chat_stream_404_for_another_students_lecture(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        "/api/auth/signup",
+        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+    )
+    other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
+    r2 = client.post(
+        f"/api/lecture/{lec['id']}/chat/stream",
+        json={"question": "hi"},
+        headers=other_headers,
+    )
+    assert r2.status_code == 404
+
+
+def test_generate_notes_stream(auth):
+    lec = _lecture(auth)
+    r = client.post(f"/api/lecture/{lec['id']}/notes/stream", headers=auth.headers)
+    assert r.status_code == 200
+
+    events = _parse_sse(r.text)
+    deltas = [e["delta"] for e in events if "delta" in e]
+    final = [e for e in events if e.get("done")]
+
+    assert len(deltas) > 1
+    assert "fake LLM answer" in "".join(deltas)
+    assert final == [{"done": True, "cached": False}]
+
+    # Persisted, same field the non-streaming route writes to
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert "fake LLM answer" in rec["notes"]
+
+
+def test_generate_notes_stream_serves_cache_as_single_chunk(auth):
+    lec = _lecture(auth)
+    # Prime the cache via the non-streaming route first
+    client.post(f"/api/lecture/{lec['id']}/notes", headers=auth.headers)
+
+    r = client.post(f"/api/lecture/{lec['id']}/notes/stream", headers=auth.headers)
+    events = _parse_sse(r.text)
+    deltas = [e["delta"] for e in events if "delta" in e]
+    final = [e for e in events if e.get("done")]
+
+    assert len(deltas) == 1  # cached notes come back as one chunk, not re-split
+    assert "fake LLM answer" in deltas[0]
+    assert final == [{"done": True, "cached": True}]
+
+
+def test_generate_notes_stream_refresh_bypasses_cache(auth):
+    lec = _lecture(auth)
+    client.post(f"/api/lecture/{lec['id']}/notes", headers=auth.headers)
+
+    r = client.post(
+        f"/api/lecture/{lec['id']}/notes/stream?refresh=true", headers=auth.headers
+    )
+    events = _parse_sse(r.text)
+    final = [e for e in events if e.get("done")]
+    assert final == [{"done": True, "cached": False}]
 
 
 def test_generators_404_on_missing_lecture(auth):

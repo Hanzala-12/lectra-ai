@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Search, Send, Sparkles, UploadCloud } from 'lucide-react';
-import { api, type ChatResponse, type LectureSummary } from '../lib/api';
+import { api, type LectureSummary } from '../lib/api';
 
 type Msg = { role: 'user' | 'ai'; text: string };
 
@@ -37,13 +37,22 @@ export function Chat() {
     const question = input.trim();
     if (!question || busy || !selectedId) return;
     setInput('');
-    setMsgs((m) => [...m, { role: 'user', text: question }]);
+    setMsgs((m) => [...m, { role: 'user', text: question }, { role: 'ai', text: '' }]);
     setBusy(true);
     try {
-      const r: ChatResponse = await api.chat(selectedId, question);
-      setMsgs((m) => [...m, { role: 'ai', text: r.answer }]);
+      await api.chatStream(selectedId, question, (delta) => {
+        setMsgs((m) => {
+          const next = [...m];
+          next[next.length - 1] = { role: 'ai', text: next[next.length - 1].text + delta };
+          return next;
+        });
+      });
     } catch (e: any) {
-      setMsgs((m) => [...m, { role: 'ai', text: `⚠️ ${e.message}` }]);
+      setMsgs((m) => {
+        const next = [...m];
+        next[next.length - 1] = { role: 'ai', text: `⚠️ ${e.message}` };
+        return next;
+      });
     } finally {
       setBusy(false);
     }
@@ -153,7 +162,7 @@ export function Chat() {
                   </div>
                 ),
               )}
-              {busy && (
+              {busy && msgs[msgs.length - 1]?.text === '' && (
                 <div className="flex items-center gap-2 text-muted text-sm">
                   <Loader2 className="w-4 h-4 animate-spin" /> Thinking…
                 </div>
