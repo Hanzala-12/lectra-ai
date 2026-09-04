@@ -36,7 +36,7 @@ from pydantic import BaseModel
 
 from llm_client import get_llm, LLMNotConfigured
 from lecture_repository import get_repository
-from rag_engine import RagEngine, build_context
+from rag_engine import RagEngine, build_context, chunk_text
 from auth_api import get_current_student
 import quiz_repository
 import study_plan_repository
@@ -80,6 +80,10 @@ class ChatRequest(BaseModel):
 
 class RenameSpeakersRequest(BaseModel):
     names: dict  # raw diarization label -> chosen display name, e.g. {"SPEAKER_00": "Professor"}
+
+
+class AddReferenceNoteRequest(BaseModel):
+    text: str
 
 
 # ----------------------------------------------------------------- helpers
@@ -154,6 +158,7 @@ def _enrich_lecture(rec: dict) -> dict:
     rec.setdefault("speaker_names", {})  # records created before this field existed
     rec.setdefault("recap_script", None)
     rec.setdefault("recap_audio_url", None)
+    rec.setdefault("reference_notes", [])
 
     # Real SM-2 state computed fresh from actual quiz history every time —
     # never persisted, so it's always in sync with the latest attempt (see
@@ -228,6 +233,43 @@ async def rename_speakers(
     }
     rec = get_repository().update(lecture_id, speaker_names=clean)
     return {"speaker_names": rec.get("speaker_names", {})}
+
+
+@router.post("/lecture/{lecture_id}/reference-notes")
+async def add_reference_note(
+    lecture_id: str,
+    body: AddReferenceNoteRequest,
+    student_id: str = Depends(get_current_student),
+):
+    """Add a student-supplied reference note to a lecture. Folded into the
+    chatbot's RAG retrieval alongside the transcript (see
+    _chat_messages_and_sources) — not used by notes/quiz/schedule
+    generation, chat only."""
+    rec = _lecture_or_404(lecture_id, student_id)
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Note text cannot be empty")
+    if len(text) > 4000:
+        raise HTTPException(
+            status_code=400, detail="Note is too long (max 4000 characters)"
+        )
+
+    notes = list(rec.get("reference_notes") or [])
+    notes.append({"id": uuid.uuid4().hex[:12], "text": text, "created_at": time.time()})
+    updated = get_repository().update(lecture_id, reference_notes=notes)
+    return {"reference_notes": updated.get("reference_notes", [])}
+
+
+@router.delete("/lecture/{lecture_id}/reference-notes/{note_id}")
+async def delete_reference_note(
+    lecture_id: str,
+    note_id: str,
+    student_id: str = Depends(get_current_student),
+):
+    rec = _lecture_or_404(lecture_id, student_id)
+    notes = [n for n in (rec.get("reference_notes") or []) if n.get("id") != note_id]
+    updated = get_repository().update(lecture_id, reference_notes=notes)
+    return {"reference_notes": updated.get("reference_notes", [])}
 
 
 @router.delete("/lecture/{lecture_id}")
@@ -482,14 +524,30 @@ async def make_recap(
 # ----------------------------------------------------------------- RAG chat
 def _chat_messages_and_sources(rec: dict, question: str, top_k: int):
     """Shared between the blocking and streaming chat routes so the two
-    prompts can't drift apart."""
-    engine = RagEngine.from_transcript(rec["transcript_text"])
+    prompts can't drift apart.
+
+    Retrieval draws on the transcript AND any reference notes the student
+    has added (see AddReferenceNoteRequest / reference_notes on the lecture
+    record) — each note is folded in as its own retrievable chunk, tagged
+    inline so a retrieved note is distinguishable from transcript prose in
+    the prompt the LLM actually sees, without needing any change to
+    RagEngine itself (it stays a generic "chunks in, ranked chunks out"
+    component)."""
+    chunks = chunk_text(rec["transcript_text"])
+    note_chunks = [
+        f"[Student's own reference note] {n['text']}"
+        for n in (rec.get("reference_notes") or [])
+        if n.get("text")
+    ]
+    engine = RagEngine(chunks + note_chunks)
     passages = engine.retrieve(question, k=top_k)
     context = build_context(passages)
     system = (
         "You are a helpful study assistant answering questions about a specific "
-        "lecture. Answer ONLY using the provided context passages. If the answer "
-        "is not in the context, say you couldn't find it in this lecture."
+        "lecture. Answer ONLY using the provided context passages, which may "
+        "include both transcript excerpts and reference notes the student has "
+        "added themselves. If the answer is not in the context, say you "
+        "couldn't find it in this lecture."
     )
     prompt = f"Context from the lecture:\n{context}\n\nQuestion: {question}\n\nAnswer:"
     messages = [

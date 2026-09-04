@@ -66,6 +66,12 @@ class LectureRepository:
             "recap_audio_url": None,  # narrated WAV for recap_script, same Piper voice
             "chat_history": [],
             "quiz_attempts": [],  # grading history — see study_api.py::grade()
+            # Student-added supplementary text (e.g. a definition, an extra
+            # example, a note from another source) that the chatbot's RAG
+            # retrieval draws on alongside the transcript — see
+            # study_api.py::_chat_messages_and_sources(). Each entry:
+            # {"id": <hex>, "text": <str>, "created_at": <unix ts>}.
+            "reference_notes": [],
         }
         self._write(record)
         return record

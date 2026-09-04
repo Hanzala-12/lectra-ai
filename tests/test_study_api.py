@@ -223,6 +223,123 @@ def test_rename_speakers_404_for_another_students_lecture(auth):
     assert r2.status_code == 404
 
 
+# ----------------------------------------------------------------- reference notes
+
+
+def test_lecture_reference_notes_defaults_empty(auth):
+    lec = _lecture(auth)
+    r = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers)
+    assert r.json()["reference_notes"] == []
+
+
+def test_add_reference_note(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "Remember: chlorophyll absorbs red and blue light."},
+        headers=auth.headers,
+    )
+    assert r.status_code == 200
+    notes = r.json()["reference_notes"]
+    assert len(notes) == 1
+    assert notes[0]["text"] == "Remember: chlorophyll absorbs red and blue light."
+    assert notes[0]["id"]
+    assert notes[0]["created_at"]
+
+    # persisted
+    r2 = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers)
+    assert len(r2.json()["reference_notes"]) == 1
+
+
+def test_add_reference_note_rejects_blank(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "   "},
+        headers=auth.headers,
+    )
+    assert r.status_code == 400
+
+
+def test_add_reference_note_rejects_too_long(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "x" * 4001},
+        headers=auth.headers,
+    )
+    assert r.status_code == 400
+
+
+def test_add_reference_note_appends_not_overwrites(auth):
+    lec = _lecture(auth)
+    client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "First note"},
+        headers=auth.headers,
+    )
+    r = client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "Second note"},
+        headers=auth.headers,
+    )
+    texts = [n["text"] for n in r.json()["reference_notes"]]
+    assert texts == ["First note", "Second note"]
+
+
+def test_delete_reference_note(auth):
+    lec = _lecture(auth)
+    add = client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "Delete me"},
+        headers=auth.headers,
+    )
+    note_id = add.json()["reference_notes"][0]["id"]
+
+    r = client.delete(
+        f"/api/lecture/{lec['id']}/reference-notes/{note_id}", headers=auth.headers
+    )
+    assert r.status_code == 200
+    assert r.json()["reference_notes"] == []
+
+
+def test_delete_reference_note_leaves_others(auth):
+    lec = _lecture(auth)
+    client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "Keep me"},
+        headers=auth.headers,
+    )
+    add2 = client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "Remove me"},
+        headers=auth.headers,
+    )
+    note_id = add2.json()["reference_notes"][1]["id"]
+
+    r = client.delete(
+        f"/api/lecture/{lec['id']}/reference-notes/{note_id}", headers=auth.headers
+    )
+    remaining = [n["text"] for n in r.json()["reference_notes"]]
+    assert remaining == ["Keep me"]
+
+
+def test_reference_notes_404_for_another_students_lecture(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        "/api/auth/signup",
+        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+    )
+    other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
+
+    r2 = client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={"text": "Sneaky note"},
+        headers=other_headers,
+    )
+    assert r2.status_code == 404
+
+
 # ----------------------------------------------------------------- generators
 
 
@@ -680,6 +797,32 @@ def test_chat(auth):
     rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
     assert len(rec["chat_history"]) == 1
     assert rec["chat_history"][0]["question"] == "What is it?"
+
+
+def test_chat_retrieval_includes_reference_notes(auth):
+    """A reference note the student added is retrievable by the chatbot
+    alongside the transcript, tagged so it's distinguishable from transcript
+    prose in the prompt the LLM actually sees. Uses a nonsense term that
+    can't appear in the (photosynthesis) transcript, so a match in the
+    returned sources can only have come from the note."""
+    lec = _lecture(auth)
+    client.post(
+        f"/api/lecture/{lec['id']}/reference-notes",
+        json={
+            "text": "Zorblatt constant equals forty-two in this course's convention."
+        },
+        headers=auth.headers,
+    )
+
+    r = client.post(
+        f"/api/lecture/{lec['id']}/chat",
+        json={"question": "What is the Zorblatt constant?", "top_k": 4},
+        headers=auth.headers,
+    )
+    assert r.status_code == 200
+    sources_text = " ".join(s["text"] for s in r.json()["sources"])
+    assert "Zorblatt constant equals forty-two" in sources_text
+    assert "[Student's own reference note]" in sources_text
 
 
 def _parse_sse(text: str) -> List[dict]:

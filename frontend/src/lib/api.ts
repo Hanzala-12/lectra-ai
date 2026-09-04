@@ -142,6 +142,12 @@ export type AudioFile = {
   duration: number | null;
 };
 
+export type ReferenceNote = {
+  id: string;
+  text: string;
+  created_at: number;
+};
+
 export type Lecture = {
   id: string;
   title: string;
@@ -161,6 +167,9 @@ export type Lecture = {
   schedule: Schedule | null;
   evaluation: Evaluation | null;
   chat_history: { question: string; answer: string }[];
+  // Student-added supplementary text the chatbot's RAG retrieval also draws
+  // on, alongside the transcript — see study_api.py::_chat_messages_and_sources.
+  reference_notes: ReferenceNote[];
 };
 
 export type QuizAnswer = {
@@ -254,6 +263,17 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ names }),
     }),
+
+  addReferenceNote: (id: string, text: string) =>
+    req<{ reference_notes: ReferenceNote[] }>(`/api/lecture/${id}/reference-notes`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+  deleteReferenceNote: (id: string, noteId: string) =>
+    req<{ reference_notes: ReferenceNote[] }>(
+      `/api/lecture/${id}/reference-notes/${noteId}`,
+      { method: 'DELETE' },
+    ),
 
   notes: (id: string, refresh = false) =>
     req<{ notes: string; cached: boolean }>(

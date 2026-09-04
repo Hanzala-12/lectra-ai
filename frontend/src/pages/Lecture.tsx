@@ -6,11 +6,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText, NotebookPen, HelpCircle, CalendarDays, BarChart3, MessageSquare,
   Loader2, AlertCircle, RefreshCw, Send, CheckCircle2, XCircle, ArrowLeft,
-  Music, Sparkles, Users, Clock, Sparkle, Pencil, X, Download, Headphones,
+  Music, Sparkles, Users, Clock, Sparkle, Pencil, X, Download, Headphones, ChevronDown,
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
   type Schedule, type Evaluation, type AudioFile, type ReviewState, type TranscriptSegment,
+  type ReferenceNote,
 } from '../lib/api';
 import { Reveal, StaggerGroup, StaggerItem } from '../components/Reveal';
 import { NumberTicker } from '../components/ui/number-ticker';
@@ -246,7 +247,7 @@ export function Lecture() {
           {tab === 'quiz' && <QuizTab id={id} initial={lecture.quiz} initialQuizId={lecture.quiz_id} />}
           {tab === 'schedule' && <ScheduleTab id={id} initial={lecture.schedule} initialReviewState={lecture.review_state} />}
           {tab === 'evaluation' && <EvaluationTab id={id} initial={lecture.evaluation} />}
-          {tab === 'chat' && <ChatTab id={id} history={lecture.chat_history} />}
+          {tab === 'chat' && <ChatTab id={id} history={lecture.chat_history} initialReferenceNotes={lecture.reference_notes} />}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -851,12 +852,49 @@ function EvaluationTab({ id, initial }: { id: string; initial: Evaluation | null
 }
 
 // ----------------------------------------------------------------- Chat
-function ChatTab({ id, history }: { id: string; history: { question: string; answer: string }[] }) {
+function ChatTab({ id, history, initialReferenceNotes }: { id: string; history: { question: string; answer: string }[]; initialReferenceNotes: ReferenceNote[] }) {
   const [msgs, setMsgs] = useState<{ role: 'user' | 'ai'; text: string }[]>(
     history.flatMap((h) => [{ role: 'user' as const, text: h.question }, { role: 'ai' as const, text: h.answer }]),
   );
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Reference materials the student adds themselves — folded into the
+  // chatbot's retrieval alongside the transcript (see
+  // study_api.py::_chat_messages_and_sources). Chat-scoped only; kept local
+  // to this tab rather than lifted into the parent lecture state since
+  // nothing else on the page reads it.
+  const [notes, setNotes] = useState<ReferenceNote[]>(initialReferenceNotes || []);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteInput, setNoteInput] = useState('');
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteErr, setNoteErr] = useState('');
+
+  const addNote = async () => {
+    const text = noteInput.trim();
+    if (!text || noteBusy) return;
+    setNoteBusy(true);
+    setNoteErr('');
+    try {
+      const r = await api.addReferenceNote(id, text);
+      setNotes(r.reference_notes);
+      setNoteInput('');
+    } catch (e: any) {
+      setNoteErr(e.message);
+    } finally {
+      setNoteBusy(false);
+    }
+  };
+
+  const removeNote = async (noteId: string) => {
+    setNoteErr('');
+    try {
+      const r = await api.deleteReferenceNote(id, noteId);
+      setNotes(r.reference_notes);
+    } catch (e: any) {
+      setNoteErr(e.message);
+    }
+  };
   const appendToLastMsg = (delta: string) => {
     setMsgs((m) => {
       const next = [...m];
@@ -882,11 +920,69 @@ function ChatTab({ id, history }: { id: string; history: { question: string; ans
   };
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <button
+          onClick={() => setNotesOpen((v) => !v)}
+          className="flex items-center gap-1.5 text-sm font-medium text-muted hover:text-text transition-colors"
+          aria-expanded={notesOpen}
+        >
+          <NotebookPen className="w-3.5 h-3.5" />
+          Reference notes{notes.length > 0 ? ` (${notes.length})` : ''}
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${notesOpen ? 'rotate-180' : ''}`} />
+        </button>
         <Link to="/app/chat" className={btnGhost}>
           <MessageSquare className="w-3.5 h-3.5" /> Chat with a different lecture
         </Link>
       </div>
+
+      <AnimatePresence initial={false}>
+        {notesOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className={`${card} space-y-3`}>
+              <p className="text-xs text-muted leading-relaxed">
+                Add extra material — a definition, an example, a note from another source — and the chatbot will draw on it alongside the transcript when answering.
+              </p>
+              {notes.length > 0 && (
+                <ul className="space-y-2">
+                  {notes.map((n) => (
+                    <li key={n.id} className="flex items-start gap-2 bg-surface2 rounded-lg px-3 py-2">
+                      <p className="text-sm text-text flex-1 whitespace-pre-wrap">{n.text}</p>
+                      <button
+                        onClick={() => removeNote(n.id)}
+                        title="Remove note"
+                        className="text-muted hover:text-error transition-colors shrink-0 p-0.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2 items-end">
+                <textarea
+                  value={noteInput}
+                  onChange={(e) => setNoteInput(e.target.value)}
+                  placeholder="Paste or type a reference note…"
+                  rows={2}
+                  maxLength={4000}
+                  className="flex-1 px-3 py-2 rounded-lg border border-border bg-surface text-text text-sm outline-none focus:border-primary transition-colors resize-none"
+                />
+                <button onClick={addNote} disabled={noteBusy || !noteInput.trim()} className={`${btn} px-4`}>
+                  {noteBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
+                </button>
+              </div>
+              {noteErr && <p className="text-xs text-error">{noteErr}</p>}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className={`${card} min-h-[40vh] max-h-[55vh] overflow-y-auto space-y-4`}>
         {msgs.length === 0 && (
           <div className="text-center py-12">
