@@ -147,6 +147,7 @@ export type Lecture = {
   diarization: any[];
   audio_files: AudioFile[];
   speaker_names: Record<string, string>; // raw diarization label -> chosen display name
+  review_state: ReviewState;
   metadata: Record<string, any>;
   notes: string | null;
   quiz: QuizQuestion[] | null;
@@ -178,6 +179,19 @@ export type Schedule = {
   available_time?: string | null;
   learning_goals?: string | null;
   created_at?: number;
+};
+
+// Real SM-2 spaced-repetition state computed from actual quiz score history
+// (src/spaced_repetition.py) — not LLM-generated, always fresh (recomputed
+// on every fetch, never stale).
+export type ReviewState = {
+  attempts_considered: number;
+  repetition_count: number;
+  ease_factor: number;
+  interval_days: number;
+  last_graded_at: number | null;
+  next_review_at: number | null;
+  quality_history: number[];
 };
 
 export type Evaluation = {
@@ -269,10 +283,12 @@ export const api = {
     available_time?: string,
     learning_goals?: string,
   ) =>
-    req<{ schedule: Schedule; cached: boolean }>(
+    req<{ schedule: Schedule; review_state: ReviewState; cached: boolean }>(
       `/api/lecture/${id}/schedule?refresh=${refresh}`,
       { method: 'POST', body: JSON.stringify({ days, available_time, learning_goals }) },
     ),
+  reviewSchedule: (id: string) =>
+    req<ReviewState>(`/api/lecture/${id}/review-schedule`),
 
   evaluate: (id: string, refresh = false) =>
     req<{ evaluation: Evaluation; cached: boolean }>(

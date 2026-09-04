@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
-  type Schedule, type Evaluation, type AudioFile,
+  type Schedule, type Evaluation, type AudioFile, type ReviewState,
 } from '../lib/api';
 
 type Tab = 'transcript' | 'notes' | 'quiz' | 'schedule' | 'evaluation' | 'chat';
@@ -187,7 +187,7 @@ export function Lecture() {
       {tab === 'transcript' && <TranscriptTab lecture={lecture} />}
       {tab === 'notes' && <NotesTab id={id} initial={lecture.notes} />}
       {tab === 'quiz' && <QuizTab id={id} initial={lecture.quiz} initialQuizId={lecture.quiz_id} />}
-      {tab === 'schedule' && <ScheduleTab id={id} initial={lecture.schedule} />}
+      {tab === 'schedule' && <ScheduleTab id={id} initial={lecture.schedule} initialReviewState={lecture.review_state} />}
       {tab === 'evaluation' && <EvaluationTab id={id} initial={lecture.evaluation} />}
       {tab === 'chat' && <ChatTab id={id} history={lecture.chat_history} />}
     </div>
@@ -512,8 +512,9 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
 }
 
 // ----------------------------------------------------------------- Schedule (StudyPlan)
-function ScheduleTab({ id, initial }: { id: string; initial: Schedule | null }) {
+function ScheduleTab({ id, initial, initialReviewState }: { id: string; initial: Schedule | null; initialReviewState: ReviewState | null }) {
   const [sch, setSch] = useState<Schedule | null>(initial);
+  const [reviewState, setReviewState] = useState<ReviewState | null>(initialReviewState);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [availableTime, setAvailableTime] = useState(initial?.available_time || '');
@@ -522,7 +523,7 @@ function ScheduleTab({ id, initial }: { id: string; initial: Schedule | null }) 
   const gen = (refresh = false) => {
     setLoading(true); setErr('');
     api.schedule(id, 7, refresh, availableTime || undefined, learningGoals || undefined)
-      .then((r) => setSch(r.schedule))
+      .then((r) => { setSch(r.schedule); setReviewState(r.review_state); })
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
   };
@@ -568,6 +569,18 @@ function ScheduleTab({ id, initial }: { id: string; initial: Schedule | null }) 
         <div className={`${card} text-sm text-muted flex flex-wrap gap-x-5 gap-y-1`}>
           {sch.available_time && <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {sch.available_time}</span>}
           {sch.learning_goals && <span className="inline-flex items-center gap-1.5"><Sparkle className="w-3.5 h-3.5" /> {sch.learning_goals}</span>}
+        </div>
+      )}
+      {reviewState && reviewState.attempts_considered > 0 && reviewState.next_review_at != null && (
+        <div className={`${card} text-sm text-muted flex items-center gap-1.5`}>
+          <CalendarDays className="w-3.5 h-3.5 text-primary shrink-0" />
+          <span>
+            <span className="text-text font-medium">
+              Next review: {new Date(reviewState.next_review_at * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </span>
+            {' '}— spaced repetition suggests {reviewState.interval_days} day{reviewState.interval_days === 1 ? '' : 's'} after
+            your last quiz ({reviewState.repetition_count} good review{reviewState.repetition_count === 1 ? '' : 's'} in a row).
+          </span>
         </div>
       )}
       <div className="grid sm:grid-cols-2 gap-3">

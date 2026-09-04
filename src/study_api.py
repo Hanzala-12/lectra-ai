@@ -41,6 +41,7 @@ import quiz_repository
 import study_plan_repository
 import audio_file_repository
 import study_tools
+import spaced_repetition
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["study"])
@@ -139,6 +140,13 @@ def _enrich_lecture(rec: dict) -> dict:
         rec.setdefault("audio_files", [])
 
     rec.setdefault("speaker_names", {})  # records created before this field existed
+
+    # Real SM-2 state computed fresh from actual quiz history every time —
+    # never persisted, so it's always in sync with the latest attempt (see
+    # spaced_repetition.py for why recomputing is correct and cheap).
+    rec["review_state"] = spaced_repetition.compute_review_state(
+        rec.get("quiz_attempts") or []
+    )
 
     return rec
 
@@ -347,6 +355,17 @@ async def grade(
     return result
 
 
+@router.get("/lecture/{lecture_id}/review-schedule")
+async def review_schedule(
+    lecture_id: str, student_id: str = Depends(get_current_student)
+):
+    """The real SM-2 spaced-repetition state on its own, with no LLM call and
+    no side effects — for surfaces that just want "when is this due" (e.g. a
+    library/dashboard badge) without generating or touching a study plan."""
+    rec = _lecture_or_404(lecture_id, student_id)
+    return spaced_repetition.compute_review_state(rec.get("quiz_attempts") or [])
+
+
 @router.post("/lecture/{lecture_id}/schedule")
 async def make_schedule(
     lecture_id: str,
@@ -355,9 +374,14 @@ async def make_schedule(
     student_id: str = Depends(get_current_student),
 ):
     rec = _lecture_or_404(lecture_id, student_id)
+    # Recomputed every call (not persisted on the plan) so it's never stale —
+    # see spaced_repetition.py.
+    review_state = spaced_repetition.compute_review_state(
+        rec.get("quiz_attempts") or []
+    )
     existing = study_plan_repository.get_repository().get_latest_for_lecture(lecture_id)
     if existing and not refresh:
-        return {"schedule": existing, "cached": True}
+        return {"schedule": existing, "review_state": review_state, "cached": True}
     llm = _require_llm()
     generated = _run_llm(
         study_tools.generate_schedule,
@@ -366,6 +390,7 @@ async def make_schedule(
         body.days,
         body.available_time,
         body.learning_goals,
+        review_state,
     )
     new_plan = study_plan_repository.get_repository().create(
         lecture_id=lecture_id,
@@ -375,7 +400,7 @@ async def make_schedule(
         available_time=body.available_time,
         learning_goals=body.learning_goals,
     )
-    return {"schedule": new_plan, "cached": False}
+    return {"schedule": new_plan, "review_state": review_state, "cached": False}
 
 
 @router.post("/lecture/{lecture_id}/evaluate")

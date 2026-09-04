@@ -122,22 +122,38 @@ def generate_schedule(
     days: int = 7,
     available_time: Optional[str] = None,
     learning_goals: Optional[str] = None,
+    review_state: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Return a personalized spaced-repetition study plan as JSON.
+    """Return a personalized study plan as JSON.
 
     available_time / learning_goals are real student-provided inputs (the
     ERD's StudyPlan.available_time / StudyPlan.learning_goals) — when given,
     the plan is built around them instead of being a generic N-day schedule.
+
+    review_state, if given, is a spaced_repetition.compute_review_state()
+    result — a real SM-2 schedule computed from this lecture's actual quiz
+    score history, not the LLM's own guess. When present, the plan is asked
+    to build toward that real review date instead of inventing its own
+    "spaced repetition" framing with nothing behind it.
     """
     system = (
         "You are a study-planning assistant. Build a realistic, motivating study "
-        "schedule using spaced repetition. Output ONLY valid JSON."
+        "schedule. Output ONLY valid JSON."
     )
     constraints = ""
     if available_time:
         constraints += f"\nThe student's available study time: {available_time}. Size each day's tasks to fit this."
     if learning_goals:
         constraints += f"\nThe student's learning goals: {learning_goals}. Prioritize the plan around achieving these."
+    if review_state and review_state.get("attempts_considered", 0) > 0:
+        from spaced_repetition import describe as _describe_review
+
+        constraints += (
+            f"\nSpaced-repetition schedule computed from this student's real quiz "
+            f"history: {_describe_review(review_state)} Build the plan's final day "
+            f"around preparing for that review, rather than proposing your own "
+            f"unrelated spacing."
+        )
     prompt = (
         f"Based on the lecture's topics, create a {days}-day study plan.{constraints}\n"
         "Return JSON:\n"

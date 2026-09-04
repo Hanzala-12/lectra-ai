@@ -515,6 +515,82 @@ def test_regenerate_schedule_creates_new_plan_version(auth):
     assert rec["schedule"]["id"] == second["id"]
 
 
+def test_lecture_review_state_defaults_empty(auth):
+    lec = _lecture(auth)
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert rec["review_state"]["attempts_considered"] == 0
+    assert rec["review_state"]["next_review_at"] is None
+
+
+def test_lecture_review_state_after_quiz_attempt(auth):
+    """The real SM-2 state (spaced_repetition.py), computed from an actual
+    graded quiz attempt — not the LLM-improvised schedule."""
+    lec = _lecture(auth)
+    quiz = client.post(
+        f"/api/lecture/{lec['id']}/quiz",
+        json={"num_questions": 1},
+        headers=auth.headers,
+    ).json()["quiz"]
+    correct_id, _ = _correct_and_wrong_answer_ids(quiz[0])
+    client.post(
+        f"/api/lecture/{lec['id']}/quiz/grade",
+        json={"answers": [correct_id]},
+        headers=auth.headers,
+    )
+
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    state = rec["review_state"]
+    assert state["attempts_considered"] == 1
+    assert state["repetition_count"] == 1
+    assert state["interval_days"] == 1
+    assert state["next_review_at"] is not None
+
+
+def test_review_schedule_endpoint(auth):
+    """Standalone endpoint — same computation, no LLM call, no side effects."""
+    lec = _lecture(auth)
+    r = client.get(f"/api/lecture/{lec['id']}/review-schedule", headers=auth.headers)
+    assert r.status_code == 200
+    assert r.json()["attempts_considered"] == 0
+
+
+def test_review_schedule_endpoint_404_for_missing_lecture(auth):
+    r = client.get("/api/lecture/does-not-exist/review-schedule", headers=auth.headers)
+    assert r.status_code == 404
+
+
+def test_review_schedule_endpoint_404_for_another_students_lecture(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        "/api/auth/signup",
+        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+    )
+    other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
+    r2 = client.get(f"/api/lecture/{lec['id']}/review-schedule", headers=other_headers)
+    assert r2.status_code == 404
+
+
+def test_schedule_response_includes_review_state(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        f"/api/lecture/{lec['id']}/schedule", json={"days": 3}, headers=auth.headers
+    )
+    assert "review_state" in r.json()
+    assert r.json()["review_state"]["attempts_considered"] == 0
+
+
+def test_schedule_response_includes_review_state_when_cached(auth):
+    lec = _lecture(auth)
+    client.post(
+        f"/api/lecture/{lec['id']}/schedule", json={"days": 3}, headers=auth.headers
+    )
+    r = client.post(
+        f"/api/lecture/{lec['id']}/schedule", json={"days": 3}, headers=auth.headers
+    )
+    assert r.json()["cached"] is True
+    assert "review_state" in r.json()
+
+
 def test_generate_evaluation(auth):
     lec = _lecture(auth)
     r = client.post(f"/api/lecture/{lec['id']}/evaluate", headers=auth.headers)
