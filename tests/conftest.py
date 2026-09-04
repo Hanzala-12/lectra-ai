@@ -147,6 +147,39 @@ def fake_llm(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def fake_tts(request, monkeypatch):
+    """Real Piper synthesis is proved separately in test_tts_engine.py (a
+    small, bounded cost worth paying once there) — that file tests the real
+    tts_engine module directly, so it's excluded here or this fixture would
+    fake out the very thing it's trying to verify. Every other, API-level
+    test cares about the /recap route's plumbing (caching, persistence,
+    auth) — a fake that writes a tiny real WAV file (so file-exists/cache
+    checks still behave correctly) without invoking Piper keeps them fast.
+    Tests that need the unavailable/503 path override
+    tts_engine.is_available explicitly."""
+    if request.module.__name__.rsplit(".", 1)[-1] == "test_tts_engine":
+        yield
+        return
+
+    import tts_engine
+    import wave
+
+    monkeypatch.setattr(tts_engine, "is_available", lambda: True)
+
+    def _fake_synthesize(text, output_path):
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with wave.open(output_path, "wb") as f:
+            f.setnchannels(1)
+            f.setsampwidth(2)
+            f.setframerate(16000)
+            f.writeframes(b"\x00\x00" * 100)
+        return True
+
+    monkeypatch.setattr(tts_engine, "synthesize", _fake_synthesize)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def no_real_embedding_model(monkeypatch):
     """API-level tests exercise chat's plumbing (auth, retrieval wiring,
     persistence), not retrieval quality — that's rag_engine.py's own test

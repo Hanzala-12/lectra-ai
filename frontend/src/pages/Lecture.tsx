@@ -3,17 +3,18 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   FileText, NotebookPen, HelpCircle, CalendarDays, BarChart3, MessageSquare,
   Loader2, AlertCircle, RefreshCw, Send, CheckCircle2, XCircle, ArrowLeft,
-  Music, Sparkles, Users, Clock, Sparkle, Pencil, X, Download,
+  Music, Sparkles, Users, Clock, Sparkle, Pencil, X, Download, Headphones,
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
   type Schedule, type Evaluation, type AudioFile, type ReviewState,
 } from '../lib/api';
 
-type Tab = 'transcript' | 'notes' | 'quiz' | 'schedule' | 'evaluation' | 'chat';
+type Tab = 'transcript' | 'notes' | 'recap' | 'quiz' | 'schedule' | 'evaluation' | 'chat';
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'transcript', label: 'Transcript', icon: <FileText className="w-4 h-4" /> },
   { id: 'notes', label: 'Notes', icon: <NotebookPen className="w-4 h-4" /> },
+  { id: 'recap', label: 'Recap', icon: <Headphones className="w-4 h-4" /> },
   { id: 'quiz', label: 'Quiz', icon: <HelpCircle className="w-4 h-4" /> },
   { id: 'schedule', label: 'Schedule', icon: <CalendarDays className="w-4 h-4" /> },
   { id: 'evaluation', label: 'Evaluation', icon: <BarChart3 className="w-4 h-4" /> },
@@ -186,6 +187,7 @@ export function Lecture() {
 
       {tab === 'transcript' && <TranscriptTab lecture={lecture} />}
       {tab === 'notes' && <NotesTab id={id} initial={lecture.notes} />}
+      {tab === 'recap' && <RecapTab id={id} initialScript={lecture.recap_script} initialAudioUrl={lecture.recap_audio_url} />}
       {tab === 'quiz' && <QuizTab id={id} initial={lecture.quiz} initialQuizId={lecture.quiz_id} />}
       {tab === 'schedule' && <ScheduleTab id={id} initial={lecture.schedule} initialReviewState={lecture.review_state} />}
       {tab === 'evaluation' && <EvaluationTab id={id} initial={lecture.evaluation} />}
@@ -424,6 +426,62 @@ function NotesTab({ id, initial }: { id: string; initial: string | null }) {
         </button>
       </div>
       <div className={card}><pre className="whitespace-pre-wrap font-sans text-[15px] text-text leading-relaxed">{notes}</pre></div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------- Recap
+function RecapTab({ id, initialScript, initialAudioUrl }: { id: string; initialScript: string | null; initialAudioUrl: string | null }) {
+  const [script, setScript] = useState(initialScript);
+  const [audioUrl, setAudioUrl] = useState(initialAudioUrl);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const gen = (refresh = false) => {
+    setLoading(true); setErr('');
+    api.recap(id, refresh)
+      .then((r) => { setScript(r.script); setAudioUrl(r.audio_url); })
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  if (loading) return <Spinner label="Writing and narrating your recap…" />;
+  if (err) return <div className="space-y-3"><ErrorBox msg={err} /><button className={btn} onClick={() => gen()}>Retry</button></div>;
+
+  if (!script || !audioUrl) {
+    return (
+      <div className={`${card} max-w-md text-center space-y-4 py-10 mx-auto`}>
+        <div className="w-12 h-12 rounded-full bg-primary-light flex items-center justify-center mx-auto">
+          <Headphones className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <p className="font-serif font-semibold text-text text-lg mb-1">Listen to a recap</p>
+          <p className="text-sm text-muted">A short, spoken-style summary of this lecture — about a minute of narrated audio.</p>
+        </div>
+        <button className={btn} onClick={() => gen()}>
+          <Headphones className="w-4 h-4" /> Generate audio recap
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className={`${card} space-y-3`}>
+        <div className="flex items-center gap-2">
+          <Headphones className="w-3.5 h-3.5 text-primary" />
+          <span className="text-sm font-medium text-text">Audio recap</span>
+        </div>
+        <audio controls className="w-full" src={buildUrl(audioUrl)} />
+      </div>
+      <div className={card}>
+        <p className="text-[15px] text-text leading-relaxed">{script}</p>
+      </div>
+      <div className="flex justify-end">
+        <button className={btnGhost} onClick={() => gen(true)}>
+          <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+        </button>
+      </div>
     </div>
   );
 }

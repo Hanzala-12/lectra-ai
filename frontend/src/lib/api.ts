@@ -148,6 +148,8 @@ export type Lecture = {
   audio_files: AudioFile[];
   speaker_names: Record<string, string>; // raw diarization label -> chosen display name
   review_state: ReviewState;
+  recap_script: string | null;
+  recap_audio_url: string | null;
   metadata: Record<string, any>;
   notes: string | null;
   quiz: QuizQuestion[] | null;
@@ -293,6 +295,12 @@ export const api = {
   evaluate: (id: string, refresh = false) =>
     req<{ evaluation: Evaluation; cached: boolean }>(
       `/api/lecture/${id}/evaluate?refresh=${refresh}`,
+      { method: 'POST' },
+    ),
+
+  recap: (id: string, refresh = false) =>
+    req<{ script: string; audio_url: string; cached: boolean }>(
+      `/api/lecture/${id}/recap?refresh=${refresh}`,
       { method: 'POST' },
     ),
 

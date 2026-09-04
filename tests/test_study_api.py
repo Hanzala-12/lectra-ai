@@ -598,6 +598,74 @@ def test_generate_evaluation(auth):
     assert r.json()["evaluation"]["main_topics"] == ["Photosynthesis"]
 
 
+# ----------------------------------------------------------------- audio recap
+
+
+def test_generate_recap(auth):
+    lec = _lecture(auth)
+    r = client.post(f"/api/lecture/{lec['id']}/recap", headers=auth.headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert "fake LLM answer" in body["script"]
+    assert body["audio_url"] == f"/api/download/recap_{lec['id']}.wav"
+    assert body["cached"] is False
+
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert rec["recap_script"] == body["script"]
+    assert rec["recap_audio_url"] == body["audio_url"]
+
+
+def test_recap_defaults_to_none(auth):
+    lec = _lecture(auth)
+    rec = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers).json()
+    assert rec["recap_script"] is None
+    assert rec["recap_audio_url"] is None
+
+
+def test_recap_is_cached(auth):
+    lec = _lecture(auth)
+    client.post(f"/api/lecture/{lec['id']}/recap", headers=auth.headers)
+    r = client.post(f"/api/lecture/{lec['id']}/recap", headers=auth.headers)
+    assert r.json()["cached"] is True
+
+
+def test_recap_refresh_regenerates_both_script_and_audio(auth):
+    lec = _lecture(auth)
+    first = client.post(f"/api/lecture/{lec['id']}/recap", headers=auth.headers).json()
+    second = client.post(
+        f"/api/lecture/{lec['id']}/recap?refresh=true", headers=auth.headers
+    ).json()
+    assert second["cached"] is False
+    # same script content (FakeLLM is deterministic) but genuinely regenerated
+    assert second["script"] == first["script"]
+
+
+def test_recap_503_when_tts_unavailable(auth, monkeypatch):
+    import tts_engine
+
+    monkeypatch.setattr(tts_engine, "is_available", lambda: False)
+    lec = _lecture(auth)
+    r = client.post(f"/api/lecture/{lec['id']}/recap", headers=auth.headers)
+    assert r.status_code == 503
+    assert "piper" in r.json()["detail"].lower()
+
+
+def test_recap_404_for_missing_lecture(auth):
+    r = client.post("/api/lecture/does-not-exist/recap", headers=auth.headers)
+    assert r.status_code == 404
+
+
+def test_recap_404_for_another_students_lecture(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        "/api/auth/signup",
+        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+    )
+    other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
+    r2 = client.post(f"/api/lecture/{lec['id']}/recap", headers=other_headers)
+    assert r2.status_code == 404
+
+
 def test_chat(auth):
     lec = _lecture(auth)
     r = client.post(

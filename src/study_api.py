@@ -25,6 +25,7 @@ storage underneath is what changed.
 
 import json
 import logging
+import os
 import time
 import uuid
 from typing import List, Optional, Any
@@ -42,6 +43,7 @@ import study_plan_repository
 import audio_file_repository
 import study_tools
 import spaced_repetition
+import tts_engine
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["study"])
@@ -102,6 +104,16 @@ def _require_llm():
     return llm
 
 
+def _require_tts():
+    if not tts_engine.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Text-to-speech voice not available. Download it with: "
+            "python -m piper.download_voices --download-dir models/piper "
+            f"{tts_engine.VOICE_NAME}",
+        )
+
+
 def _run_llm(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
@@ -140,6 +152,8 @@ def _enrich_lecture(rec: dict) -> dict:
         rec.setdefault("audio_files", [])
 
     rec.setdefault("speaker_names", {})  # records created before this field existed
+    rec.setdefault("recap_script", None)
+    rec.setdefault("recap_audio_url", None)
 
     # Real SM-2 state computed fresh from actual quiz history every time —
     # never persisted, so it's always in sync with the latest attempt (see
@@ -416,6 +430,53 @@ async def evaluate(
     evaluation = _run_llm(study_tools.evaluate_lecture, rec["transcript_text"], llm)
     get_repository().update(lecture_id, evaluation=evaluation)
     return {"evaluation": evaluation, "cached": False}
+
+
+# ----------------------------------------------------------------- audio recap
+_OUTPUTS_DIR = os.path.join(os.path.dirname(__file__), "..", "outputs")
+
+
+@router.post("/lecture/{lecture_id}/recap")
+async def make_recap(
+    lecture_id: str,
+    refresh: bool = False,
+    student_id: str = Depends(get_current_student),
+):
+    """A short spoken-style summary, narrated as audio (tts_engine.py / Piper)
+    — an "audio overview" of the lecture, not just a text one. Script and
+    audio are generated together and cached as a pair; refresh regenerates
+    both (a stale script narrated over old audio would be worse than either
+    alone)."""
+    rec = _lecture_or_404(lecture_id, student_id)
+    cached_audio_path = (
+        os.path.join(_OUTPUTS_DIR, os.path.basename(rec["recap_audio_url"]))
+        if rec.get("recap_audio_url")
+        else None
+    )
+    if (
+        not refresh
+        and rec.get("recap_script")
+        and cached_audio_path
+        and os.path.exists(cached_audio_path)
+    ):
+        return {
+            "script": rec["recap_script"],
+            "audio_url": rec["recap_audio_url"],
+            "cached": True,
+        }
+
+    llm = _require_llm()
+    _require_tts()
+    script = _run_llm(study_tools.generate_recap_script, rec["transcript_text"], llm)
+
+    audio_filename = f"recap_{lecture_id}.wav"
+    audio_path = os.path.join(_OUTPUTS_DIR, audio_filename)
+    if not tts_engine.synthesize(script, audio_path):
+        raise HTTPException(status_code=502, detail="Audio recap synthesis failed")
+
+    audio_url = f"/api/download/{audio_filename}"
+    get_repository().update(lecture_id, recap_script=script, recap_audio_url=audio_url)
+    return {"script": script, "audio_url": audio_url, "cached": False}
 
 
 # ----------------------------------------------------------------- RAG chat

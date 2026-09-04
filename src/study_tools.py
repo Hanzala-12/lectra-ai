@@ -181,6 +181,29 @@ def evaluate_lecture(transcript: str, llm) -> Dict[str, Any]:
     return llm.complete_json(prompt, system=system, max_tokens=1500)
 
 
+# ---------------------------------------------------------- AUDIO RECAP
+def generate_recap_script(transcript: str, llm) -> str:
+    """A short, natural-sounding spoken summary meant to be narrated aloud
+    (see tts_engine.py) — deliberately NOT the same shape as generate_notes():
+    no Markdown, no headers, no bullet points, since those read awkwardly out
+    loud. Plain flowing prose, roughly 45-75 seconds of speech."""
+    system = (
+        "You are narrating a short audio recap of a lecture, the way a "
+        "person would summarize it out loud to a friend. Write plain "
+        "spoken prose only: no Markdown, no headers, no bullet points, no "
+        "numbered lists — just natural sentences meant to be read aloud by "
+        "a text-to-speech voice. Be accurate to the transcript; do not "
+        "invent facts that aren't in it."
+    )
+    prompt = (
+        "Write a spoken-style recap of this lecture in about 120-180 words: "
+        "what it's about, the key idea, and why it matters. Plain prose "
+        "only — this will be read aloud exactly as written.\n\n"
+        f"TRANSCRIPT:\n{_prep(transcript)}"
+    )
+    return llm.complete(prompt, system=system, max_tokens=400, temperature=0.4)
+
+
 def grade_quiz(
     quiz: List[Dict[str, Any]], answers: List[Optional[str]], llm=None
 ) -> Dict[str, Any]:

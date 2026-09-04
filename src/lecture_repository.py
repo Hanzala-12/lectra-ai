@@ -62,6 +62,8 @@ class LectureRepository:
             "quiz": None,
             "schedule": None,
             "evaluation": None,
+            "recap_script": None,  # spoken-style summary — see study_api.py::make_recap()
+            "recap_audio_url": None,  # narrated WAV for recap_script, same Piper voice
             "chat_history": [],
             "quiz_attempts": [],  # grading history — see study_api.py::grade()
         }
