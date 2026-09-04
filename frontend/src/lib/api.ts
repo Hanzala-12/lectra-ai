@@ -93,6 +93,7 @@ export type Lecture = {
   transcript_segments: TranscriptSegment[];
   diarization: any[];
   audio_files: AudioFile[];
+  speaker_names: Record<string, string>; // raw diarization label -> chosen display name
   metadata: Record<string, any>;
   notes: string | null;
   quiz: QuizQuestion[] | null;
@@ -175,6 +176,11 @@ export const api = {
   getLecture: (id: string) => req<Lecture>(`/api/lecture/${id}`),
   deleteLecture: (id: string) =>
     req<{ deleted: boolean }>(`/api/lecture/${id}`, { method: 'DELETE' }),
+  renameSpeakers: (id: string, names: Record<string, string>) =>
+    req<{ speaker_names: Record<string, string> }>(`/api/lecture/${id}/speakers`, {
+      method: 'PUT',
+      body: JSON.stringify({ names }),
+    }),
 
   notes: (id: string, refresh = false) =>
     req<{ notes: string; cached: boolean }>(

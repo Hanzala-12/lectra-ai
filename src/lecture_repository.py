@@ -47,6 +47,12 @@ class LectureRepository:
             "transcript_segments": transcript_segments or [],
             "diarization": diarization or [],
             "metadata": metadata or {},
+            # Raw diarization label -> student-chosen display name, e.g.
+            # {"SPEAKER_00": "Professor"}. Presentation-only: transcript_text /
+            # transcript_segments keep the raw labels (RAG chunks, LLM prompts
+            # and existing exports all key off them); callers that render
+            # speaker labels to a human apply this mapping on top.
+            "speaker_names": {},
             # AudioFile is now its own top-level entity — see
             # audio_file_repository.py and backend.py::process_lecture(). Not
             # stored on this record; study_api.py merges the latest AudioFile

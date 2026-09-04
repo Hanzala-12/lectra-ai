@@ -73,6 +73,10 @@ class ChatRequest(BaseModel):
     top_k: int = 4
 
 
+class RenameSpeakersRequest(BaseModel):
+    names: dict  # raw diarization label -> chosen display name, e.g. {"SPEAKER_00": "Professor"}
+
+
 # ----------------------------------------------------------------- helpers
 def _lecture_or_404(lecture_id: str, student_id: str):
     """Fetch a lecture, scoped to its owner. A lecture that exists but belongs
@@ -132,6 +136,8 @@ def _enrich_lecture(rec: dict) -> dict:
     else:
         rec.setdefault("audio_files", [])
 
+    rec.setdefault("speaker_names", {})  # records created before this field existed
+
     return rec
 
 
@@ -179,6 +185,25 @@ async def create_lecture(
 @router.get("/lecture/{lecture_id}")
 async def get_lecture(lecture_id: str, student_id: str = Depends(get_current_student)):
     return _enrich_lecture(_lecture_or_404(lecture_id, student_id))
+
+
+@router.put("/lecture/{lecture_id}/speakers")
+async def rename_speakers(
+    lecture_id: str,
+    body: RenameSpeakersRequest,
+    student_id: str = Depends(get_current_student),
+):
+    """Save student-chosen display names for diarization labels (SPEAKER_00
+    -> "Professor"). Presentation-only — see the comment on
+    Lecture.speaker_names in lecture_repository.py."""
+    _lecture_or_404(lecture_id, student_id)
+    clean = {
+        str(label).strip(): str(name).strip()
+        for label, name in (body.names or {}).items()
+        if str(label).strip() and str(name).strip()
+    }
+    rec = get_repository().update(lecture_id, speaker_names=clean)
+    return {"speaker_names": rec.get("speaker_names", {})}
 
 
 @router.delete("/lecture/{lecture_id}")

@@ -137,6 +137,90 @@ def test_library_lists_created_lecture(auth):
     assert lec["id"] in ids
 
 
+# ----------------------------------------------------------------- speaker renaming
+
+
+def test_lecture_speaker_names_defaults_empty(auth):
+    lec = _lecture(auth)
+    r = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers)
+    assert r.json()["speaker_names"] == {}
+
+
+def test_rename_speakers_persists(auth):
+    lec = _lecture(auth)
+    r = client.put(
+        f"/api/lecture/{lec['id']}/speakers",
+        json={"names": {"SPEAKER_00": "Professor", "SPEAKER_01": "Student A"}},
+        headers=auth.headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["speaker_names"] == {
+        "SPEAKER_00": "Professor",
+        "SPEAKER_01": "Student A",
+    }
+
+    # persisted — a fresh GET reflects it too
+    r2 = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers)
+    assert r2.json()["speaker_names"] == {
+        "SPEAKER_00": "Professor",
+        "SPEAKER_01": "Student A",
+    }
+
+
+def test_rename_speakers_drops_blank_entries(auth):
+    """Whitespace-only names (e.g. a cleared input field) are dropped rather
+    than persisted as a blank label."""
+    lec = _lecture(auth)
+    r = client.put(
+        f"/api/lecture/{lec['id']}/speakers",
+        json={"names": {"SPEAKER_00": "Professor", "SPEAKER_01": "   "}},
+        headers=auth.headers,
+    )
+    assert r.json()["speaker_names"] == {"SPEAKER_00": "Professor"}
+
+
+def test_rename_speakers_overwrites_previous_mapping(auth):
+    """A second save fully replaces the map rather than merging — matches how
+    the frontend always sends the complete current set of names."""
+    lec = _lecture(auth)
+    client.put(
+        f"/api/lecture/{lec['id']}/speakers",
+        json={"names": {"SPEAKER_00": "Professor"}},
+        headers=auth.headers,
+    )
+    r = client.put(
+        f"/api/lecture/{lec['id']}/speakers",
+        json={"names": {"SPEAKER_00": "Dr. Smith"}},
+        headers=auth.headers,
+    )
+    assert r.json()["speaker_names"] == {"SPEAKER_00": "Dr. Smith"}
+
+
+def test_rename_speakers_404_for_missing_lecture(auth):
+    r = client.put(
+        "/api/lecture/does-not-exist/speakers",
+        json={"names": {"SPEAKER_00": "Professor"}},
+        headers=auth.headers,
+    )
+    assert r.status_code == 404
+
+
+def test_rename_speakers_404_for_another_students_lecture(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        "/api/auth/signup",
+        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+    )
+    other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
+
+    r2 = client.put(
+        f"/api/lecture/{lec['id']}/speakers",
+        json={"names": {"SPEAKER_00": "Professor"}},
+        headers=other_headers,
+    )
+    assert r2.status_code == 404
+
+
 # ----------------------------------------------------------------- generators
 
 

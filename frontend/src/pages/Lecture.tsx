@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   FileText, NotebookPen, HelpCircle, CalendarDays, BarChart3, MessageSquare,
   Loader2, AlertCircle, RefreshCw, Send, CheckCircle2, XCircle, ArrowLeft,
-  Music, Sparkles, Users, Clock, Sparkle,
+  Music, Sparkles, Users, Clock, Sparkle, Pencil, X,
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
@@ -108,25 +108,81 @@ export function Lecture() {
 
 // ----------------------------------------------------------------- Transcript
 const AUDIO_KIND_LABEL: Record<string, string> = { original: 'Original recording', cleaned: 'Cleaned audio' };
-function audioLabel(kind: string) {
+
+// Resolves a raw diarization label ("SPEAKER_00") to whatever the student
+// renamed it to, falling back to an auto-formatted default ("Speaker 00").
+function speakerName(rawLabel: string, names: Record<string, string>) {
+  return names[rawLabel] || rawLabel.replace('SPEAKER_', 'Speaker ');
+}
+
+function audioLabel(kind: string, names: Record<string, string> = {}) {
   if (AUDIO_KIND_LABEL[kind]) return AUDIO_KIND_LABEL[kind];
-  if (kind.startsWith('speaker:')) return kind.replace('speaker:', '').replace(/_/g, ' ');
+  if (kind.startsWith('speaker:')) return speakerName(kind.replace('speaker:', ''), names);
   return kind;
 }
 
 // Not a component (called inline, wrapped in a keyed element by the caller)
 // — this project has no @types/react anywhere, so `key` isn't recognized as
 // a reserved prop on a locally-declared function component.
-function audioCardContent(a: AudioFile) {
+function audioCardContent(a: AudioFile, names: Record<string, string>) {
   const isSpeaker = a.kind.startsWith('speaker:');
   return (
     <div className="rounded-lg bg-surface2 p-4">
       <div className="flex items-center gap-2 mb-2.5">
         {isSpeaker ? <Users className="w-3.5 h-3.5 text-primary" /> : <Music className="w-3.5 h-3.5 text-primary" />}
-        <span className="text-sm font-medium text-text">{audioLabel(a.kind)}</span>
+        <span className="text-sm font-medium text-text">{audioLabel(a.kind, names)}</span>
         {a.duration != null && <span className="text-xs text-muted ml-auto">{Math.round(a.duration)}s</span>}
       </div>
       <audio controls className="w-full h-9" src={buildUrl(a.file_path)} />
+    </div>
+  );
+}
+
+// Compact inline editor for renaming diarization labels ("SPEAKER_00" ->
+// "Professor"). Scoped to TranscriptTab's own state since speaker names are
+// only rendered here today; lift to the Lecture page if that changes.
+function SpeakerRenameForm({
+  rawLabels, names, onSave, onCancel,
+}: {
+  rawLabels: string[];
+  names: Record<string, string>;
+  onSave: (next: Record<string, string>) => void;
+  onCancel: () => void;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, string>>(
+    Object.fromEntries(rawLabels.map((l) => [l, names[l] || ''])),
+  );
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(drafts);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className={`${card} space-y-3`}>
+      <p className="label-caps text-muted">Rename speakers</p>
+      <div className="space-y-2">
+        {rawLabels.map((label) => (
+          <div key={label} className="flex items-center gap-2">
+            <span className="text-xs text-muted w-20 shrink-0">{label.replace('SPEAKER_', 'Speaker ')}</span>
+            <input
+              value={drafts[label] ?? ''}
+              onChange={(e) => setDrafts({ ...drafts, [label]: e.target.value })}
+              placeholder="e.g. Professor"
+              className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md border border-border bg-surface text-sm outline-none focus:border-primary transition-colors"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 justify-end">
+        <button onClick={onCancel} className={btnGhost}><X className="w-3.5 h-3.5" /> Cancel</button>
+        <button onClick={save} disabled={saving} className={`${btn} px-3.5 py-1.5 text-xs`}>
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Save
+        </button>
+      </div>
     </div>
   );
 }
@@ -135,6 +191,16 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
   const audioFiles = lecture.audio_files || [];
   const legacyAudio = lecture.metadata?.audio_url;
   const segments = lecture.transcript_segments || [];
+
+  const [names, setNames] = useState<Record<string, string>>(lecture.speaker_names || {});
+  const [renaming, setRenaming] = useState(false);
+  const rawLabels = Array.from(new Set(segments.map((s) => s.speaker).filter((s): s is string => !!s)));
+
+  const saveNames = async (next: Record<string, string>) => {
+    const r = await api.renameSpeakers(lecture.id, next);
+    setNames(r.speaker_names);
+    setRenaming(false);
+  };
 
   // The one audio file transcript clicks control — prefer "cleaned" (what a
   // listener actually wants), else whatever's first, else the legacy
@@ -171,7 +237,7 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
           <div className={`${card} space-y-2.5`}>
             <div className="flex items-center gap-2">
               <Music className="w-3.5 h-3.5 text-primary" />
-              <span className="text-sm font-medium text-text">{primary ? audioLabel(primary.kind) : 'Cleaned audio'}</span>
+              <span className="text-sm font-medium text-text">{primary ? audioLabel(primary.kind, names) : 'Cleaned audio'}</span>
               {playing && (
                 <span className="ml-auto flex items-center gap-1 text-[10px] text-primary font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" /> Playing
@@ -193,7 +259,7 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
         {otherFiles.length > 0 && (
           <div className={`${card} space-y-3`}>
             <p className="label-caps text-muted">{primaryUrl ? 'Other audio' : 'Audio'}</p>
-            {otherFiles.map((a) => <div key={a.audio_id}>{audioCardContent(a)}</div>)}
+            {otherFiles.map((a) => <div key={a.audio_id}>{audioCardContent(a, names)}</div>)}
           </div>
         )}
         {!primaryUrl && legacyAudio && (
@@ -201,6 +267,15 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
             <p className="text-sm font-medium text-text mb-2">Cleaned audio</p>
             <audio controls className="w-full" src={buildUrl(legacyAudio)} />
           </div>
+        )}
+        {rawLabels.length > 0 && (
+          renaming ? (
+            <SpeakerRenameForm rawLabels={rawLabels} names={names} onSave={saveNames} onCancel={() => setRenaming(false)} />
+          ) : (
+            <button onClick={() => setRenaming(true)} className={`${btnGhost} ${card}`}>
+              <Pencil className="w-3.5 h-3.5" /> Rename speakers
+            </button>
+          )
         )}
       </div>
       <div className={card}>
@@ -220,7 +295,7 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
                 >
                   {s.speaker && (
                     <span className={`font-semibold mr-2 ${isActive ? 'text-primary-dark' : 'text-primary'}`}>
-                      {s.speaker.replace('SPEAKER_', 'Speaker ')}
+                      {speakerName(s.speaker, names)}
                     </span>
                   )}
                   <span className={`text-xs mr-2 tabular-nums ${isActive ? 'text-primary-dark/70' : 'text-muted'}`}>
