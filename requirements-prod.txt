@@ -72,3 +72,6 @@ websockets==13.1
 
 # Study assistant — uploaded PDF reference files for the RAG chat
 pypdf==6.13.1
+
+# GPU tunnel — local client for offloading the audio pipeline to Kaggle
+requests==2.32.3

@@ -172,20 +172,21 @@ class ProcessingConfig(BaseModel):
         return v
 
 
-def initialize_pipeline(config: ProcessingConfig):
-    """Initialize pipeline with configuration"""
-    global pipeline
+def _build_local_pipeline() -> LectraAIPipeline:
+    import yaml as _yaml
 
-    if pipeline is None:
-        import yaml as _yaml
+    with open("config.yaml") as _f:
+        _cfg = _yaml.safe_load(_f)
+    _cache_enabled = _cfg.get("cache", {}).get("enabled", False)
+    return LectraAIPipeline("config.yaml", enable_cache=_cache_enabled)
 
-        with open("config.yaml") as _f:
-            _cfg = _yaml.safe_load(_f)
-        _cache_enabled = _cfg.get("cache", {}).get("enabled", False)
-        pipeline = LectraAIPipeline("config.yaml", enable_cache=_cache_enabled)
 
+def _configure_local_pipeline(pipe: LectraAIPipeline, config: ProcessingConfig):
+    """Apply per-request whisper-model / diarization settings to a local
+    LectraAIPipeline instance. Shared by the normal local path below and by
+    process_audio()'s GPU-tunnel-failed fallback, so this only lives once."""
     # Skip ASR initialisation entirely when asr.skip is true
-    asr_skip = pipeline.config.get("asr", {}).get("skip", False)
+    asr_skip = pipe.config.get("asr", {}).get("skip", False)
     if not asr_skip:
         # ASRProcessor internally maps the "turbo" alias to "large-v3-turbo" and
         # stores THAT as .model_size — compare against the same normalized form,
@@ -196,24 +197,57 @@ def initialize_pipeline(config: ProcessingConfig):
             if config.whisper_model == "turbo"
             else config.whisper_model
         )
-        current_model = pipeline.asr.model_size if pipeline.asr is not None else None
+        current_model = pipe.asr.model_size if pipe.asr is not None else None
         if current_model != requested_model:
             logger.info(
                 f"Loading faster-whisper '{config.whisper_model}' (was '{current_model}')"
             )
             from asr_processor import ASRProcessor  # type: ignore
 
-            pipeline.asr = ASRProcessor(
+            gpu = torch.cuda.is_available()
+            pipe.asr = ASRProcessor(
                 model_size=config.whisper_model,
-                language=pipeline.config["asr"].get("language"),
-                device="cpu",
-                compute_type="int8",
+                language=pipe.config["asr"].get("language"),
+                device="cuda" if gpu else "cpu",
+                compute_type="float16" if gpu else "int8",
             )
 
-    pipeline.config["diarization"]["enabled"] = config.enable_diarization
+    pipe.config["diarization"]["enabled"] = config.enable_diarization
     if not config.enable_diarization:
-        pipeline.diarization = None
+        pipe.diarization = None
 
+
+# Lazily built only if the GPU tunnel is configured but a request to it fails
+# — see process_audio(). Kept separate from `pipeline` so a healthy tunnel
+# never pays the cost of loading these models locally too.
+_local_fallback_pipeline = None
+
+
+def initialize_pipeline(config: ProcessingConfig):
+    """Initialize pipeline with configuration. Returns a RemoteGpuPipeline
+    (see src/remote_pipeline.py) when GPU_TUNNEL_URL is set — cheap to build,
+    no model loading, the actual work happens on the Kaggle side — otherwise
+    the local LectraAIPipeline, same as always."""
+    global pipeline
+    from remote_pipeline import build_pipeline_from_env, RemoteGpuPipeline
+
+    if pipeline is None:
+        pipeline = build_pipeline_from_env()
+        if pipeline is not None:
+            logger.info(
+                f"GPU tunnel configured ({pipeline.base_url}) — audio "
+                "processing will be offloaded there, falling back to local "
+                "CPU processing if it's unreachable"
+            )
+        else:
+            pipeline = _build_local_pipeline()
+
+    if isinstance(pipeline, RemoteGpuPipeline):
+        pipeline.whisper_model = config.whisper_model
+        pipeline.enable_diarization = config.enable_diarization
+        return pipeline
+
+    _configure_local_pipeline(pipeline, config)
     return pipeline
 
 
@@ -226,6 +260,14 @@ async def root():
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint with system status"""
+    from remote_pipeline import RemoteGpuPipeline
+
+    gpu_tunnel = None
+    if isinstance(pipeline, RemoteGpuPipeline):
+        gpu_tunnel = {"configured": True, "reachable": pipeline.health_check()}
+    elif os.getenv("GPU_TUNNEL_URL"):
+        gpu_tunnel = {"configured": True, "reachable": None}  # not built yet
+
     return {
         "status": "healthy",
         "version": "1.0.0",
@@ -236,6 +278,7 @@ async def health_check():
             torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
         ),
         "cuda_version": torch.version.cuda if torch.cuda.is_available() else None,
+        "gpu_tunnel": gpu_tunnel,
     }
 
 
@@ -466,12 +509,31 @@ async def process_audio(
         output_dir = os.path.join(temp_dir, "outputs")
         os.makedirs(output_dir, exist_ok=True)
 
-        result = pipe.process(
-            input_path=input_path,
-            output_dir=output_dir,
-            save_transcript=True,
-            transcript_format=transcript_format,
-        )
+        from remote_pipeline import RemoteGpuPipeline
+
+        try:
+            result = pipe.process(
+                input_path=input_path,
+                output_dir=output_dir,
+                save_transcript=True,
+                transcript_format=transcript_format,
+            )
+        except Exception as e:
+            if not isinstance(pipe, RemoteGpuPipeline):
+                raise  # a real local-pipeline failure — don't mask it
+            logger.warning(
+                f"GPU tunnel request failed ({e}); falling back to local CPU processing"
+            )
+            global _local_fallback_pipeline
+            if _local_fallback_pipeline is None:
+                _local_fallback_pipeline = _build_local_pipeline()
+            _configure_local_pipeline(_local_fallback_pipeline, config)
+            result = _local_fallback_pipeline.process(
+                input_path=input_path,
+                output_dir=output_dir,
+                save_transcript=True,
+                transcript_format=transcript_format,
+            )
 
         # Read output files
         audio_output = result["audio_output_path"]

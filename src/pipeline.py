@@ -341,8 +341,11 @@ class LectraAIPipeline:
             )
             if enhancer_class is not None:
                 try:
-                    self.neural_enhancer = enhancer_class(device="cpu")
-                    logger.info("Neural enhancer (MetricGAN+) enabled")
+                    import torch
+
+                    ne_device = "cuda" if torch.cuda.is_available() else "cpu"
+                    self.neural_enhancer = enhancer_class(device=ne_device)
+                    logger.info(f"Neural enhancer (MetricGAN+) enabled on {ne_device}")
                 except Exception as e:
                     logger.warning(
                         f"Neural enhancer unavailable, continuing without it: {e}"

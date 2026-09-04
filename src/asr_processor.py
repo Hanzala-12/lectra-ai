@@ -37,7 +37,13 @@ class ASRProcessor:
         self.compute_type = compute_type
 
         if device is None:
-            self.device = "cpu"  # Default to CPU for laptops
+            import torch
+
+            # Auto-detect: CPU on a laptop (the common case for this project),
+            # CUDA when one's actually available (e.g. the Kaggle GPU tunnel
+            # worker — see gpu_tunnel/) — same pattern already used by
+            # DeepFilterProcessor and SpeakerDiarization.
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
         else:
             self.device = device
 
