@@ -75,18 +75,28 @@ class DeepFilterProcessor:
             double_pass: Run enhancement twice for stubborn noise (costs 2x DeepFilter time)
             atten_lim_db: Max noise attenuation in dB. 100 = unlimited (most aggressive).
                           Lower values (e.g. 6) are conservative and let noise through.
-            device: torch device (cuda/cpu), auto-detected if None
+            device: torch device (cuda/cpu). Always cpu regardless of this
+                     argument or CUDA availability - see note below.
         """
         self.model_name = model_name
         self.post_filter = post_filter
         self.double_pass = double_pass
         self.atten_lim_db = atten_lim_db
 
-        # Auto-detect device
-        if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            self.device = device
+        # Deliberately CPU-only, even when a GPU is available (e.g. the
+        # gpu_tunnel/ Kaggle worker) - confirmed via live testing that
+        # deepfilternet 0.5.6's own df.enhance.df_features() does
+        # `audio.numpy()` on the input tensor without moving it to CPU
+        # first, which raises `TypeError: can't convert cuda:0 device type
+        # tensor to numpy` the moment audio actually lives on a CUDA
+        # device. That's a bug in the df package itself (confirmed via the
+        # traceback pointing at its own site-packages file, not this
+        # project's code), not something fixable here short of monkey-
+        # patching its internals. DeepFilterNet is already "faster than
+        # realtime" on CPU per its own docs, so this is a safe trade-off -
+        # every other GPU-capable stage (diarization, MetricGAN+,
+        # faster-whisper) still runs on GPU when one's available.
+        self.device = "cpu"
 
         logger.info(f"Initializing {model_name} on {self.device}")
         self._load_model()
