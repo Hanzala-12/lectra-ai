@@ -146,6 +146,21 @@ def fake_llm(monkeypatch):
     yield fake
 
 
+@pytest.fixture(autouse=True)
+def no_real_embedding_model(monkeypatch):
+    """API-level tests exercise chat's plumbing (auth, retrieval wiring,
+    persistence), not retrieval quality — that's rag_engine.py's own test
+    suite, with a fast deterministic fake. Without this, the real
+    sentence-transformers model would load on the first chat-touching test
+    (a one-time ~30-45s hit per test run) purely to prove things that don't
+    need real embeddings at all. Forces the TF-IDF fallback path instead,
+    same as this project mocks other heavy models (DeepFilterProcessor,
+    ASRProcessor, ...) out of the unit-test suite."""
+    import rag_engine
+
+    monkeypatch.setattr(rag_engine, "_get_embedding_model", lambda: None)
+
+
 @dataclass
 class AuthedStudent:
     headers: dict

@@ -42,8 +42,13 @@ aiohttp>=3.9.0,<3.11.0
 faster-whisper>=1.0.0,<2.0.0
 
 # Study assistant — NLP/LLM + RAG (notes, quiz, schedule, evaluation, chat)
-# LLM calls go over HTTP (httpx, already pulled in by FastAPI); RAG uses TF-IDF.
+# LLM calls go over HTTP (httpx, already pulled in by FastAPI).
 scikit-learn>=1.3.0,<1.6.0
+# RAG retrieval — sentence embeddings (all-MiniLM-L6-v2, ~90MB, fully offline
+# once cached) reusing the torch already installed above for the audio
+# pipeline. rag_engine.py falls back to the scikit-learn TF-IDF above
+# automatically if this isn't installed or the model can't load.
+sentence-transformers>=6.0.0,<7.0.0
 
 # Video Processing
 moviepy>=1.0.3,<2.0.0
