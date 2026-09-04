@@ -1,0 +1,41 @@
+# Installed on Kaggle *on top of* its own preinstalled CUDA torch / torchaudio
+# / numpy / scipy. Deliberately NOT listed here, so pip's resolver leaves
+# them alone instead of pulling CPU-only PyPI wheels and quietly killing GPU
+# acceleration — see kaggle_worker.ipynb's first cell, which hard-asserts
+# CUDA is still available right after this install finishes.
+#
+# Versions matched to requirements-prod.txt in the repo root.
+
+librosa==0.10.2
+soundfile==0.12.1
+pydub==0.25.1
+
+# DeepFilterNet for noise reduction
+deepfilternet==0.5.6
+
+# Pre-processing
+nara-wpe==0.0.11
+pyrnnoise==0.4.3
+
+# Post-diarization spectral noise gating
+noisereduce==3.0.2
+
+# Voice Activity Detection
+webrtcvad-wheels==2.0.11
+silero-vad==5.1.2
+
+# Diarization
+pyannote.audio==3.3.2
+# Neural speech enhancement - MetricGAN+ final denoise stage (also diarization backbone)
+speechbrain==1.0.3
+lightning==2.4.0
+torchmetrics==1.6.1
+lightning-utilities==0.11.8
+
+# Speech Recognition
+faster-whisper==1.0.3
+
+# Small worker API (receives jobs from the local backend over the tunnel)
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
