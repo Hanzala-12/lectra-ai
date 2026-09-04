@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useOutlet } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, Library, LineChart, MessageSquare, GraduationCap, LogOut, Loader2, Plus } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, Library, LineChart, MessageSquare, GraduationCap, Loader2, Plus } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { api, getToken, type Student } from '../lib/api';
+import { ProfileMenu } from './ProfileMenu';
 
 export function AppLayout() {
   const location = useLocation();
@@ -49,8 +50,6 @@ export function AppLayout() {
     { path: '/app/analytics', icon: <LineChart className="w-[18px] h-[18px]" />, label: 'Analytics' },
     { path: '/app/chat', icon: <MessageSquare className="w-[18px] h-[18px]" />, label: 'AI Chat' },
   ];
-
-  const initials = (student?.name || student?.username || '?').slice(0, 2).toUpperCase();
 
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col items-center">
@@ -104,22 +103,7 @@ export function AppLayout() {
 
           {student && (
             <div className="mt-auto pt-4 border-t border-border">
-              <div className="flex items-center gap-3 px-1 py-2 rounded-lg hover:bg-surface2 transition-colors group">
-                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  {initials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-text truncate">{student.name}</p>
-                  <p className="text-xs text-muted truncate">@{student.username}</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  title="Log out"
-                  className="text-muted hover:text-error transition-colors p-1.5 rounded-lg hover:bg-error-light shrink-0"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
+              <ProfileMenu student={student} onLogout={handleLogout} openDirection="up" />
             </div>
           )}
         </aside>
@@ -136,9 +120,7 @@ export function AppLayout() {
               </span>
             </Link>
             {student && (
-              <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-muted hover:text-text transition-colors">
-                <LogOut className="w-3.5 h-3.5" /> Log out
-              </button>
+              <ProfileMenu student={student} onLogout={handleLogout} compact openDirection="down" />
             )}
           </div>
           {/* Mobile Nav (horizontal scroll) */}
