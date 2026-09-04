@@ -10,6 +10,7 @@ import {
 import { api, getToken, type LectureSummary, type Student } from '../lib/api';
 import { Reveal, StaggerGroup, StaggerItem } from '../components/Reveal';
 import { NumberTicker } from '../components/ui/number-ticker';
+import { ActivityHeatmap } from '../components/ActivityHeatmap';
 
 function formatDate(ts?: number) {
   if (!ts) return 'Unknown date';
@@ -61,6 +62,12 @@ export function Dashboard() {
     const completedArtifacts = notes + quizzes + analyzed;
     const possibleArtifacts = Math.max(lectures.length * 3, 1);
     const notReady = lectures.filter((l) => !(l.has_notes && l.has_quiz)).length;
+    // Rough, clearly-labeled estimate, not a tracked metric: the marketing
+    // copy's own claim is that re-watching to take notes costs ~3x a
+    // lecture's length, so Lectra's own notes/quiz generation saves roughly
+    // the other 2x. Same order-of-magnitude logic as any "time saved"
+    // callout — a fun, honest approximation, not a precise measurement.
+    const hoursSaved = Math.round((totalMinutes * 2) / 60);
     return {
       totalWords,
       totalMinutes,
@@ -68,6 +75,7 @@ export function Dashboard() {
       quizzes,
       analyzed,
       notReady,
+      hoursSaved,
       completion: Math.round((completedArtifacts / possibleArtifacts) * 100),
     };
   }, [lectures]);
@@ -119,6 +127,20 @@ export function Dashboard() {
         <StaggerItem><Stat label="Quizzes ready" value={stats.quizzes} /></StaggerItem>
         <StaggerItem><Stat label="Analyzed" value={stats.analyzed} /></StaggerItem>
       </StaggerGroup>
+
+      {lectures.length > 0 && (
+        <Reveal delay={0.05} className="bg-surface rounded-lg p-6 mb-12">
+          <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
+            <h2 className="font-serif text-xl font-semibold text-text">Study activity</h2>
+            {stats.hoursSaved > 0 && (
+              <p className="text-sm text-muted">
+                Estimated <span className="font-semibold text-primary-dark">~{stats.hoursSaved}h</span> saved not re-watching lectures
+              </p>
+            )}
+          </div>
+          <ActivityHeatmap lectures={lectures} />
+        </Reveal>
+      )}
 
       {lectures.length === 0 ? (
         <Reveal delay={0.1} className="rounded-lg border border-dashed border-border2 bg-surface p-12 text-center">
