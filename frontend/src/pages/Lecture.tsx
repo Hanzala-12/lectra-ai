@@ -134,31 +134,102 @@ function audioCardContent(a: AudioFile) {
 function TranscriptTab({ lecture }: { lecture: LectureT }) {
   const audioFiles = lecture.audio_files || [];
   const legacyAudio = lecture.metadata?.audio_url;
+  const segments = lecture.transcript_segments || [];
+
+  // The one audio file transcript clicks control — prefer "cleaned" (what a
+  // listener actually wants), else whatever's first, else the legacy
+  // single-file field on old records. Every other file (original, per-speaker
+  // splits) still plays independently below, just not synced.
+  const primary = audioFiles.find((a) => a.kind === 'cleaned') || audioFiles[0] || null;
+  const primaryUrl = primary ? buildUrl(primary.file_path) : legacyAudio ? buildUrl(legacyAudio) : null;
+  const otherFiles = primary ? audioFiles.filter((a) => a.audio_id !== primary.audio_id) : audioFiles;
+
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  const lineRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
+
+  const activeIndex = primaryUrl
+    ? segments.findIndex((s) => currentTime >= s.start && currentTime < s.end)
+    : -1;
+
+  useEffect(() => {
+    if (activeIndex >= 0) lineRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [activeIndex]);
+
+  const seekTo = (start: number) => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.currentTime = start;
+    el.play();
+  };
+
   return (
     <div className="grid md:grid-cols-[260px_1fr] gap-6">
       <div className="space-y-3 md:sticky md:top-6 md:self-start">
-        {audioFiles.length > 0 ? (
-          <div className={`${card} space-y-3`}>
-            <p className="label-caps text-muted">Audio</p>
-            {audioFiles.map((a) => <div key={a.audio_id}>{audioCardContent(a)}</div>)}
+        {primaryUrl && (
+          <div className={`${card} space-y-2.5`}>
+            <div className="flex items-center gap-2">
+              <Music className="w-3.5 h-3.5 text-primary" />
+              <span className="text-sm font-medium text-text">{primary ? audioLabel(primary.kind) : 'Cleaned audio'}</span>
+              {playing && (
+                <span className="ml-auto flex items-center gap-1 text-[10px] text-primary font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" /> Playing
+                </span>
+              )}
+            </div>
+            <audio
+              ref={audioRef}
+              controls
+              className="w-full h-9"
+              src={primaryUrl}
+              onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+            />
+            {segments.length > 0 && <p className="text-xs text-muted">Click any line to jump there.</p>}
           </div>
-        ) : legacyAudio ? (
+        )}
+        {otherFiles.length > 0 && (
+          <div className={`${card} space-y-3`}>
+            <p className="label-caps text-muted">{primaryUrl ? 'Other audio' : 'Audio'}</p>
+            {otherFiles.map((a) => <div key={a.audio_id}>{audioCardContent(a)}</div>)}
+          </div>
+        )}
+        {!primaryUrl && legacyAudio && (
           <div className={card}>
             <p className="text-sm font-medium text-text mb-2">Cleaned audio</p>
             <audio controls className="w-full" src={buildUrl(legacyAudio)} />
           </div>
-        ) : null}
+        )}
       </div>
       <div className={card}>
-        {lecture.transcript_segments?.length ? (
-          <div className="space-y-3.5 max-h-[65vh] overflow-y-auto pr-1">
-            {lecture.transcript_segments.map((s, i) => (
-              <p key={i} className="text-[15px] text-text leading-relaxed">
-                {s.speaker && <span className="text-primary font-semibold mr-2">{s.speaker.replace('SPEAKER_', 'Speaker ')}</span>}
-                <span className="text-muted text-xs mr-2 tabular-nums">{Math.floor(s.start / 60)}:{String(Math.floor(s.start % 60)).padStart(2, '0')}</span>
-                {s.text}
-              </p>
-            ))}
+        {segments.length ? (
+          <div className="space-y-1 max-h-[65vh] overflow-y-auto pr-1">
+            {segments.map((s, i) => {
+              const isActive = i === activeIndex;
+              return (
+                <button
+                  key={i}
+                  ref={(el) => { lineRefs.current[i] = el; }}
+                  onClick={() => seekTo(s.start)}
+                  disabled={!primaryUrl}
+                  className={`block w-full text-left text-[15px] leading-relaxed px-2.5 py-1.5 rounded-md transition-colors ${
+                    isActive ? 'bg-primary-light text-primary-dark' : 'text-text'
+                  } ${primaryUrl ? 'hover:bg-surface2 cursor-pointer' : 'cursor-default'}`}
+                >
+                  {s.speaker && (
+                    <span className={`font-semibold mr-2 ${isActive ? 'text-primary-dark' : 'text-primary'}`}>
+                      {s.speaker.replace('SPEAKER_', 'Speaker ')}
+                    </span>
+                  )}
+                  <span className={`text-xs mr-2 tabular-nums ${isActive ? 'text-primary-dark/70' : 'text-muted'}`}>
+                    {Math.floor(s.start / 60)}:{String(Math.floor(s.start % 60)).padStart(2, '0')}
+                  </span>
+                  {s.text}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <p className="text-[15px] text-text whitespace-pre-wrap leading-relaxed">{lecture.transcript_text}</p>
