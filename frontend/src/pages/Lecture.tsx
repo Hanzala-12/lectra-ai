@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText, NotebookPen, HelpCircle, CalendarDays, BarChart3, MessageSquare,
   Loader2, AlertCircle, RefreshCw, Send, CheckCircle2, XCircle, ArrowLeft,
@@ -11,6 +12,8 @@ import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
   type Schedule, type Evaluation, type AudioFile, type ReviewState, type TranscriptSegment,
 } from '../lib/api';
+import { Reveal, StaggerGroup, StaggerItem } from '../components/Reveal';
+import { NumberTicker } from '../components/ui/number-ticker';
 
 type Tab = 'transcript' | 'notes' | 'recap' | 'quiz' | 'schedule' | 'evaluation' | 'chat';
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -197,7 +200,7 @@ export function Lecture() {
         <ArrowLeft className="w-4 h-4" /> Back to Library
       </Link>
 
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <Reveal className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           {durationMin != null && <p className="label-caps text-primary mb-2">{durationMin} min audio</p>}
           <h1 className="font-serif text-3xl sm:text-4xl font-semibold text-text mb-2 tracking-tight">{lecture.title}</h1>
@@ -206,29 +209,46 @@ export function Lecture() {
         <button onClick={() => downloadLectureMarkdown(lecture)} className={`${btnGhost} shrink-0`}>
           <Download className="w-3.5 h-3.5" /> Export as Markdown
         </button>
-      </div>
+      </Reveal>
 
       <div className="flex flex-wrap gap-1 border-b border-border mb-6">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => selectTab(t.id)}
-            className={`flex items-center gap-1.5 px-3.5 py-2.5 text-sm border-b-2 -mb-px font-medium transition-colors whitespace-nowrap ${
-              tab === t.id ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-text'
+            className={`relative flex items-center gap-1.5 px-3.5 py-2.5 text-sm -mb-px font-medium transition-colors whitespace-nowrap ${
+              tab === t.id ? 'text-primary' : 'text-muted hover:text-text'
             }`}
           >
             {t.icon} {t.label}
+            {tab === t.id && (
+              <motion.span
+                layoutId="lecture-tab-underline"
+                className="absolute left-0 right-0 bottom-0 h-0.5 bg-primary"
+                transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+              />
+            )}
           </button>
         ))}
       </div>
 
-      {tab === 'transcript' && <TranscriptTab lecture={lecture} />}
-      {tab === 'notes' && <NotesTab id={id} initial={lecture.notes} />}
-      {tab === 'recap' && <RecapTab id={id} initialScript={lecture.recap_script} initialAudioUrl={lecture.recap_audio_url} />}
-      {tab === 'quiz' && <QuizTab id={id} initial={lecture.quiz} initialQuizId={lecture.quiz_id} />}
-      {tab === 'schedule' && <ScheduleTab id={id} initial={lecture.schedule} initialReviewState={lecture.review_state} />}
-      {tab === 'evaluation' && <EvaluationTab id={id} initial={lecture.evaluation} />}
-      {tab === 'chat' && <ChatTab id={id} history={lecture.chat_history} />}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          {tab === 'transcript' && <TranscriptTab lecture={lecture} />}
+          {tab === 'notes' && <NotesTab id={id} initial={lecture.notes} />}
+          {tab === 'recap' && <RecapTab id={id} initialScript={lecture.recap_script} initialAudioUrl={lecture.recap_audio_url} />}
+          {tab === 'quiz' && <QuizTab id={id} initial={lecture.quiz} initialQuizId={lecture.quiz_id} />}
+          {tab === 'schedule' && <ScheduleTab id={id} initial={lecture.schedule} initialReviewState={lecture.review_state} />}
+          {tab === 'evaluation' && <EvaluationTab id={id} initial={lecture.evaluation} />}
+          {tab === 'chat' && <ChatTab id={id} history={lecture.chat_history} />}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -371,7 +391,7 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
 
   return (
     <div className="grid md:grid-cols-[260px_1fr] gap-6">
-      <div className="space-y-3 md:sticky md:top-6 md:self-start">
+      <Reveal className="space-y-3 md:sticky md:top-6 md:self-start">
         {primaryUrl && (
           <div className={`${card} space-y-2.5`}>
             <div className="flex items-center gap-2">
@@ -416,8 +436,8 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
             </button>
           )
         )}
-      </div>
-      <div className={card}>
+      </Reveal>
+      <Reveal delay={0.08} direction="right" className={card}>
         {segments.length ? (
           <div className="space-y-1 max-h-[65vh] overflow-y-auto pr-1">
             {segments.map((s, i) => {
@@ -452,7 +472,7 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
         ) : (
           <p className="text-[15px] text-text whitespace-pre-wrap leading-relaxed">{lecture.transcript_text}</p>
         )}
-      </div>
+      </Reveal>
     </div>
   );
 }
@@ -478,7 +498,7 @@ function NotesTab({ id, initial }: { id: string; initial: string | null }) {
           <RefreshCw className="w-3.5 h-3.5" /> Regenerate
         </button>
       </div>
-      <div className={card}><Markdown>{notes}</Markdown></div>
+      <Reveal className={card}><Markdown>{notes}</Markdown></Reveal>
     </div>
   );
 }
@@ -503,7 +523,7 @@ function RecapTab({ id, initialScript, initialAudioUrl }: { id: string; initialS
 
   if (!script || !audioUrl) {
     return (
-      <div className={`${card} max-w-md text-center space-y-4 py-10 mx-auto`}>
+      <Reveal className={`${card} max-w-md text-center space-y-4 py-10 mx-auto`}>
         <div className="w-12 h-12 rounded-full bg-primary-light flex items-center justify-center mx-auto">
           <Headphones className="w-5 h-5 text-primary" />
         </div>
@@ -514,22 +534,22 @@ function RecapTab({ id, initialScript, initialAudioUrl }: { id: string; initialS
         <button className={btn} onClick={() => gen()}>
           <Headphones className="w-4 h-4" /> Generate audio recap
         </button>
-      </div>
+      </Reveal>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className={`${card} space-y-3`}>
+      <Reveal className={`${card} space-y-3`}>
         <div className="flex items-center gap-2">
           <Headphones className="w-3.5 h-3.5 text-primary" />
           <span className="text-sm font-medium text-text">Audio recap</span>
         </div>
         <audio controls className="w-full" src={buildUrl(audioUrl)} />
-      </div>
-      <div className={card}>
+      </Reveal>
+      <Reveal delay={0.08} className={card}>
         <p className="text-[15px] text-text leading-relaxed">{script}</p>
-      </div>
+      </Reveal>
       <div className="flex justify-end">
         <button className={btnGhost} onClick={() => gen(true)}>
           <RefreshCw className="w-3.5 h-3.5" /> Regenerate
@@ -571,10 +591,13 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
         <button
           key={n}
           onClick={() => setNumQuestions(n)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-            numQuestions === n ? 'bg-primary text-white' : 'bg-surface2 text-text hover:bg-primary-light/60'
+          className={`relative px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            numQuestions === n ? 'text-white' : 'bg-surface2 text-text hover:bg-primary-light/60'
           }`}
         >
+          {numQuestions === n && (
+            <motion.span layoutId="quiz-count-pill" className="absolute inset-0 -z-10 rounded-lg bg-primary" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />
+          )}
           {n}
         </button>
       ))}
@@ -585,7 +608,7 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
   // the LLM call, instead of silently always generating 5.
   if (!quiz?.length) {
     return (
-      <div className={`${card} max-w-md space-y-5`}>
+      <Reveal className={`${card} max-w-md space-y-5`}>
         <div className="flex items-center gap-2 text-text font-serif font-semibold text-lg">
           <HelpCircle className="w-4 h-4 text-primary" /> Build a quiz
         </div>
@@ -594,7 +617,7 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
           {countPicker}
         </div>
         <button className={btn} onClick={() => gen()}>Generate quiz</button>
-      </div>
+      </Reveal>
     );
   }
 
@@ -602,14 +625,16 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
   return (
     <div className="space-y-4">
       {result && (
-        <div className={`${card} space-y-4`}>
+        <Reveal className={`${card} space-y-4`}>
           <div className="flex items-center gap-5">
             <div className="relative w-16 h-16 shrink-0">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-surface2)" strokeWidth="10" />
                 <circle cx="50" cy="50" r="42" fill="none" stroke={result.score >= 70 ? 'var(--color-primary)' : 'var(--color-accent)'} strokeWidth="10" strokeDasharray={`${result.score * 2.64} 264`} />
               </svg>
-              <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-text">{Math.round(result.score)}%</div>
+              <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-text">
+                <NumberTicker value={Math.round(result.score)} className="text-sm font-bold text-text tabular-nums" />%
+              </div>
             </div>
             <div className="flex-1">
               <p className="font-serif font-semibold text-lg text-text">{result.correct} of {result.total} correct</p>
@@ -625,11 +650,12 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
               <RefreshCw className="w-3.5 h-3.5" /> New quiz
             </button>
           </div>
-        </div>
+        </Reveal>
       )}
-      {quiz.map((q, qi) => {
+      <StaggerGroup className="space-y-4">
+        {quiz.map((q, qi) => {
         return (
-          <div key={q.question_id} className={card}>
+          <StaggerItem key={q.question_id} className={card}>
             <p className="font-medium text-text mb-3.5">{qi + 1}. {q.question}</p>
             <div className="space-y-2">
               {q.answers.map((a) => {
@@ -643,7 +669,7 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
                 return (
                   <button key={a.answer_id} disabled={!!result}
                     onClick={() => setAnswers({ ...answers, [q.question_id]: a.answer_id })}
-                    className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-between gap-2 ${picked && !result ? 'bg-primary text-white font-medium' : cls}`}>
+                    className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all active:scale-[0.98] flex items-center justify-between gap-2 ${picked && !result ? 'bg-primary text-white font-medium' : cls}`}>
                     {a.text}
                     {result && a.is_correct && <CheckCircle2 className="w-4 h-4 shrink-0" />}
                     {result && picked && !a.is_correct && <XCircle className="w-4 h-4 shrink-0" />}
@@ -652,9 +678,10 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
               })}
             </div>
             {result && <p className="text-xs text-muted mt-3 leading-relaxed">{q.explanation}</p>}
-          </div>
+          </StaggerItem>
         );
-      })}
+        })}
+      </StaggerGroup>
       {!result && (
         <div className="flex items-center justify-between">
           <p className="text-xs text-muted">{answeredCount} of {quiz.length} answered</p>
@@ -689,7 +716,7 @@ function ScheduleTab({ id, initial, initialReviewState }: { id: string; initial:
   // (StudyPlan.available_time / StudyPlan.learning_goals) before generating.
   if (!sch?.plan) {
     return (
-      <div className={`${card} max-w-lg space-y-5`}>
+      <Reveal className={`${card} max-w-lg space-y-5`}>
         <div className="flex items-center gap-2 text-text font-serif font-semibold text-lg">
           <Sparkle className="w-4 h-4 text-primary" /> Personalize your plan
         </div>
@@ -713,20 +740,20 @@ function ScheduleTab({ id, initial, initialReviewState }: { id: string; initial:
           />
         </div>
         <button className={btn} onClick={() => gen()}>Build my study plan</button>
-      </div>
+      </Reveal>
     );
   }
 
   return (
     <div className="space-y-3">
       {(sch.available_time || sch.learning_goals) && (
-        <div className={`${card} text-sm text-muted flex flex-wrap gap-x-5 gap-y-1`}>
+        <Reveal className={`${card} text-sm text-muted flex flex-wrap gap-x-5 gap-y-1`}>
           {sch.available_time && <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {sch.available_time}</span>}
           {sch.learning_goals && <span className="inline-flex items-center gap-1.5"><Sparkle className="w-3.5 h-3.5" /> {sch.learning_goals}</span>}
-        </div>
+        </Reveal>
       )}
       {reviewState && reviewState.attempts_considered > 0 && reviewState.next_review_at != null && (
-        <div className={`${card} text-sm text-muted flex items-center gap-1.5`}>
+        <Reveal delay={0.05} className={`${card} text-sm text-muted flex items-center gap-1.5`}>
           <CalendarDays className="w-3.5 h-3.5 text-primary shrink-0" />
           <span>
             <span className="text-text font-medium">
@@ -735,11 +762,11 @@ function ScheduleTab({ id, initial, initialReviewState }: { id: string; initial:
             {' '}— spaced repetition suggests {reviewState.interval_days} day{reviewState.interval_days === 1 ? '' : 's'} after
             your last quiz ({reviewState.repetition_count} good review{reviewState.repetition_count === 1 ? '' : 's'} in a row).
           </span>
-        </div>
+        </Reveal>
       )}
-      <div className="grid sm:grid-cols-2 gap-3">
+      <StaggerGroup className="grid sm:grid-cols-2 gap-3">
         {sch.plan.map((d) => (
-          <div key={d.day} className={card}>
+          <StaggerItem key={d.day} className={card}>
             <div className="flex justify-between items-baseline mb-2.5">
               <p className="font-serif font-semibold text-text">Day {d.day} · {d.focus}</p>
               <span className="text-xs text-muted shrink-0 ml-2">{d.est_minutes} min</span>
@@ -751,11 +778,11 @@ function ScheduleTab({ id, initial, initialReviewState }: { id: string; initial:
                 </li>
               ))}
             </ul>
-          </div>
+          </StaggerItem>
         ))}
-      </div>
+      </StaggerGroup>
       {sch.tips?.length > 0 && (
-        <div className={card}>
+        <Reveal delay={0.1} className={card}>
           <p className="font-serif font-semibold text-text mb-2.5 flex items-center gap-1.5"><Sparkle className="w-4 h-4 text-primary" /> Tips</p>
           <ul className="space-y-1.5">
             {sch.tips.map((t, i) => (
@@ -764,7 +791,7 @@ function ScheduleTab({ id, initial, initialReviewState }: { id: string; initial:
               </li>
             ))}
           </ul>
-        </div>
+        </Reveal>
       )}
       <div className="flex justify-end">
         <button className={btnGhost} onClick={() => gen(true)}>
@@ -790,23 +817,25 @@ function EvaluationTab({ id, initial }: { id: string; initial: Evaluation | null
   if (!ev) return <p className="text-muted text-sm">No analysis.</p>;
   return (
     <div className="space-y-3">
-      <div className="grid sm:grid-cols-2 gap-6 pb-6 border-b border-border">
-        <div>
+      <StaggerGroup className="grid sm:grid-cols-2 gap-6 pb-6 border-b border-border">
+        <StaggerItem>
           <p className="label-caps text-muted mb-1.5">Difficulty</p>
           <p className="font-serif text-text font-semibold text-2xl capitalize">{ev.difficulty}</p>
-        </div>
-        <div>
+        </StaggerItem>
+        <StaggerItem>
           <p className="label-caps text-muted mb-1.5">Est. study time</p>
-          <p className="font-serif text-text font-semibold text-2xl">{ev.estimated_study_minutes} min</p>
-        </div>
-      </div>
-      <div className={card}><p className="font-serif font-semibold text-lg text-text mb-2">Summary</p><Markdown>{ev.summary}</Markdown></div>
-      <div className={card}>
+          <p className="font-serif text-text font-semibold text-2xl">
+            <NumberTicker value={ev.estimated_study_minutes} className="font-serif text-text font-semibold text-2xl tabular-nums" /> min
+          </p>
+        </StaggerItem>
+      </StaggerGroup>
+      <Reveal className={card}><p className="font-serif font-semibold text-lg text-text mb-2">Summary</p><Markdown>{ev.summary}</Markdown></Reveal>
+      <Reveal delay={0.06} className={card}>
         <p className="font-serif font-semibold text-lg text-text mb-2.5">Main topics</p>
         <div className="flex flex-wrap gap-2">{ev.main_topics?.map((t, i) => <span key={i} className="text-xs px-2.5 py-1.5 rounded-full bg-primary-light text-primary-dark font-medium">{t}</span>)}</div>
-      </div>
+      </Reveal>
       {ev.comprehension_questions?.length > 0 && (
-        <div className={card}>
+        <Reveal delay={0.12} className={card}>
           <p className="font-serif font-semibold text-lg text-text mb-2.5">Check your understanding</p>
           <ul className="space-y-1.5">
             {ev.comprehension_questions.map((q, i) => (
@@ -815,7 +844,7 @@ function EvaluationTab({ id, initial }: { id: string; initial: Evaluation | null
               </li>
             ))}
           </ul>
-        </div>
+        </Reveal>
       )}
     </div>
   );
@@ -869,12 +898,14 @@ function ChatTab({ id, history }: { id: string; history: { question: string; ans
         )}
         {msgs.map((m, i) =>
           m.role === 'user' ? (
-            <p key={i} className="label-caps text-muted">{m.text}</p>
+            <motion.p key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="label-caps text-muted">
+              {m.text}
+            </motion.p>
           ) : (
-            <div key={i}>
+            <motion.div key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
               <p className="label-caps text-primary mb-1.5">Lectra</p>
               <Markdown>{m.text}</Markdown>
-            </div>
+            </motion.div>
           ),
         )}
         {busy && msgs[msgs.length - 1]?.text === '' && <Spinner label="Thinking…" />}
