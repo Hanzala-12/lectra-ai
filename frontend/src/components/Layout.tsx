@@ -1,13 +1,15 @@
 import { Link, useLocation, useOutlet } from 'react-router-dom';
 import { Menu, X, Github, GraduationCap } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useScroll, useSpring } from 'motion/react';
 
 export function Layout() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const element = useOutlet();
+  const { scrollYProgress } = useScroll();
+  const scrollProgress = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
 
   useEffect(() => {
     const handleScroll = () => {
@@ -19,6 +21,14 @@ export function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-bg">
+      {/* Scroll progress indicator — thin brand-gradient line tracking read
+          progress down the page. Fixed above the header (z-[60] > header's
+          z-50) so it stays visible whether or not the header background is. */}
+      <motion.div
+        className="fixed top-0 left-0 right-0 z-[60] h-[2px] origin-left bg-gradient-to-r from-primary to-accent"
+        style={{ scaleX: scrollProgress }}
+      />
+
       {/* Navigation */}
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -37,9 +47,18 @@ export function Layout() {
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-8">
-            <Link to="/features" className="text-sm font-medium text-muted hover:text-primary transition-colors">Features</Link>
-            <a href="/#how-it-works" className="text-sm font-medium text-muted hover:text-primary transition-colors">How It Works</a>
-            <Link to="/about" className="text-sm font-medium text-muted hover:text-primary transition-colors">About Us</Link>
+            <Link to="/features" className="group relative text-sm font-medium text-muted hover:text-primary transition-colors">
+              Features
+              <span className="absolute left-0 -bottom-1 h-px w-full origin-left scale-x-0 bg-primary transition-transform duration-300 group-hover:scale-x-100" />
+            </Link>
+            <a href="/#how-it-works" className="group relative text-sm font-medium text-muted hover:text-primary transition-colors">
+              How It Works
+              <span className="absolute left-0 -bottom-1 h-px w-full origin-left scale-x-0 bg-primary transition-transform duration-300 group-hover:scale-x-100" />
+            </a>
+            <Link to="/about" className="group relative text-sm font-medium text-muted hover:text-primary transition-colors">
+              About Us
+              <span className="absolute left-0 -bottom-1 h-px w-full origin-left scale-x-0 bg-primary transition-transform duration-300 group-hover:scale-x-100" />
+            </Link>
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
