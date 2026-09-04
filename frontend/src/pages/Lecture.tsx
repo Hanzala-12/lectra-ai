@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   FileText, NotebookPen, HelpCircle, CalendarDays, BarChart3, MessageSquare,
   Loader2, AlertCircle, RefreshCw, Send, CheckCircle2, XCircle, ArrowLeft,
-  Music, Sparkles, Users, Clock, Sparkle, Pencil, X,
+  Music, Sparkles, Users, Clock, Sparkle, Pencil, X, Download,
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
@@ -50,6 +50,89 @@ function ErrorBox({ msg }: { msg: string }) {
   );
 }
 
+// ----------------------------------------------------------------- Export
+// One consolidated Markdown file of everything generated for this lecture so
+// far (notes/quiz/schedule/evaluation are skipped individually if not yet
+// generated — never a placeholder), plus the transcript as reference
+// material at the end. Pure client-side Blob download, no backend route.
+function buildExportMarkdown(lecture: LectureT): string {
+  const speaker = (label: string) => lecture.speaker_names?.[label] || label.replace('SPEAKER_', 'Speaker ');
+  const lines: string[] = [
+    `# ${lecture.title}`,
+    '',
+    `*Exported from Lectra AI — ${new Date().toLocaleString()}*`,
+  ];
+
+  if (lecture.notes) {
+    lines.push('', '## Notes', '', lecture.notes);
+  }
+
+  if (lecture.quiz?.length) {
+    lines.push('', '## Quiz', '');
+    lecture.quiz.forEach((q, i) => {
+      lines.push(`**${i + 1}. ${q.question}**`, '');
+      q.answers.forEach((a) => lines.push(`- ${a.is_correct ? '[x]' : '[ ]'} ${a.text}`));
+      lines.push('', `*${q.explanation}*`, '');
+    });
+  }
+
+  if (lecture.schedule?.plan?.length) {
+    lines.push('', '## Study schedule', '');
+    if (lecture.schedule.available_time) lines.push(`**Available time:** ${lecture.schedule.available_time}  `);
+    if (lecture.schedule.learning_goals) lines.push(`**Learning goals:** ${lecture.schedule.learning_goals}`);
+    lines.push('');
+    lecture.schedule.plan.forEach((d) => {
+      lines.push(`### Day ${d.day} — ${d.focus} (${d.est_minutes} min)`, '');
+      (d.tasks || []).forEach((t) => lines.push(`- ${t}`));
+      lines.push('');
+    });
+    if (lecture.schedule.tips?.length) {
+      lines.push('**Tips**', '');
+      lecture.schedule.tips.forEach((t) => lines.push(`- ${t}`));
+    }
+  }
+
+  if (lecture.evaluation) {
+    const ev = lecture.evaluation;
+    lines.push(
+      '', '## Evaluation', '',
+      `**Difficulty:** ${ev.difficulty}  `,
+      `**Estimated study time:** ${ev.estimated_study_minutes} min`,
+      '', ev.summary, '',
+    );
+    if (ev.main_topics?.length) lines.push(`**Main topics:** ${ev.main_topics.join(', ')}`, '');
+    if (ev.comprehension_questions?.length) {
+      lines.push('**Check your understanding:**', '');
+      ev.comprehension_questions.forEach((q) => lines.push(`- ${q}`));
+    }
+  }
+
+  if (lecture.transcript_text) {
+    lines.push('', '## Transcript', '');
+    if (lecture.transcript_segments?.length) {
+      lecture.transcript_segments.forEach((s) => {
+        lines.push(`${s.speaker ? `**${speaker(s.speaker)}:** ` : ''}${s.text}`, '');
+      });
+    } else {
+      lines.push(lecture.transcript_text);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function downloadLectureMarkdown(lecture: LectureT) {
+  const md = buildExportMarkdown(lecture);
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeTitle = lecture.title.trim().replace(/[^\w\- ]+/g, '').replace(/\s+/g, '-').toLowerCase() || 'lecture';
+  a.download = `${safeTitle}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function Lecture() {
   const { id = '' } = useParams();
   const [params, setParams] = useSearchParams();
@@ -76,10 +159,15 @@ export function Lecture() {
         <ArrowLeft className="w-4 h-4" /> Back to Library
       </Link>
 
-      <div className="mb-8">
-        {durationMin != null && <p className="label-caps text-primary mb-2">{durationMin} min audio</p>}
-        <h1 className="font-serif text-3xl sm:text-4xl font-semibold text-text mb-2 tracking-tight">{lecture.title}</h1>
-        <p className="text-sm text-muted">{lecture.transcript_text.split(/\s+/).filter(Boolean).length.toLocaleString()} words</p>
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          {durationMin != null && <p className="label-caps text-primary mb-2">{durationMin} min audio</p>}
+          <h1 className="font-serif text-3xl sm:text-4xl font-semibold text-text mb-2 tracking-tight">{lecture.title}</h1>
+          <p className="text-sm text-muted">{lecture.transcript_text.split(/\s+/).filter(Boolean).length.toLocaleString()} words</p>
+        </div>
+        <button onClick={() => downloadLectureMarkdown(lecture)} className={`${btnGhost} shrink-0`}>
+          <Download className="w-3.5 h-3.5" /> Export as Markdown
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-1 border-b border-border mb-6">
