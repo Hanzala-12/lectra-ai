@@ -72,6 +72,12 @@ class LectureRepository:
             # study_api.py::_chat_messages_and_sources(). Each entry:
             # {"id": <hex>, "text": <str>, "created_at": <unix ts>}.
             "reference_notes": [],
+            # Student-uploaded supplementary files (PDF only for now) — same
+            # role as reference_notes but sourced from an upload instead of
+            # typed text; extracted text is stored inline, same as
+            # transcript_text. Each entry: {"id": <hex>, "filename": <str>,
+            # "text": <str>, "char_count": <int>, "created_at": <unix ts>}.
+            "reference_files": [],
         }
         self._write(record)
         return record

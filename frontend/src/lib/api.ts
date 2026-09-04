@@ -29,7 +29,10 @@ export function clearToken(): void {
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  // FormData bodies (file uploads) must NOT get an explicit Content-Type —
+  // the browser sets its own multipart boundary header automatically.
+  const isFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData;
+  const headers: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(buildUrl(path), {
@@ -148,6 +151,13 @@ export type ReferenceNote = {
   created_at: number;
 };
 
+export type ReferenceFile = {
+  id: string;
+  filename: string;
+  char_count: number;
+  created_at: number;
+};
+
 export type Lecture = {
   id: string;
   title: string;
@@ -170,6 +180,9 @@ export type Lecture = {
   // Student-added supplementary text the chatbot's RAG retrieval also draws
   // on, alongside the transcript — see study_api.py::_chat_messages_and_sources.
   reference_notes: ReferenceNote[];
+  // Same role as reference_notes but sourced from an uploaded PDF instead of
+  // typed text — see study_api.py::add_reference_file.
+  reference_files: ReferenceFile[];
 };
 
 export type QuizAnswer = {
@@ -272,6 +285,20 @@ export const api = {
   deleteReferenceNote: (id: string, noteId: string) =>
     req<{ reference_notes: ReferenceNote[] }>(
       `/api/lecture/${id}/reference-notes/${noteId}`,
+      { method: 'DELETE' },
+    ),
+
+  uploadReferenceFile: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return req<{ reference_files: ReferenceFile[] }>(
+      `/api/lecture/${id}/reference-files`,
+      { method: 'POST', body: formData },
+    );
+  },
+  deleteReferenceFile: (id: string, fileId: string) =>
+    req<{ reference_files: ReferenceFile[] }>(
+      `/api/lecture/${id}/reference-files/${fileId}`,
       { method: 'DELETE' },
     ),
 

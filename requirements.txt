@@ -72,3 +72,6 @@ fastapi>=0.109.0,<0.120.0
 uvicorn[standard]>=0.27.0,<0.32.0
 python-multipart>=0.0.6,<0.1.0
 websockets>=12.0,<14.0
+
+# Study assistant — uploaded PDF reference files for the RAG chat
+pypdf>=4.0.0,<7.0.0
