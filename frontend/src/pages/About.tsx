@@ -1,44 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
 import { Github, Linkedin, ArrowRight, Code, BookOpen, BrainCircuit } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-const FadeIn = ({ children, delay = 0, direction = 'up', className = '' }: { children: React.ReactNode, delay?: number, direction?: 'up' | 'down' | 'left' | 'right', className?: string, key?: React.Key }) => {
-  const [isVisible, setIsVisible] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      setIsVisible(entry.isIntersecting);
-    }, { threshold: 0.15 });
-
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
-
-  const getTransform = () => {
-    switch(direction) {
-      case 'up': return 'translateY(40px)';
-      case 'down': return 'translateY(-40px)';
-      case 'left': return 'translateX(40px)';
-      case 'right': return 'translateX(-40px)';
-      default: return 'translateY(40px)';
-    }
-  };
-
-  return (
-    <div
-      ref={ref}
-      className={`${className} transition-all duration-1000 ease-out`}
-      style={{
-        opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translate(0)' : getTransform(),
-        transitionDelay: isVisible ? `${delay}ms` : '0ms'
-      }}
-    >
-      {children}
-    </div>
-  );
-};
+import { Reveal } from '../components/Reveal';
 
 export function About() {
   const team = [
@@ -76,7 +38,7 @@ export function About() {
       {/* Hero Section */}
       <section className="pt-28 pb-20">
         <div className="max-w-4xl mx-auto px-8 sm:px-10">
-          <FadeIn>
+          <Reveal>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-light text-primary-dark text-sm font-medium mb-6">
               <BrainCircuit className="w-4 h-4" />
               Revolutionizing Audio Intelligence
@@ -87,24 +49,24 @@ export function About() {
             <p className="text-lg text-muted leading-relaxed">
               Lectra AI is engineered to bridge the gap between noisy environments and crystal-clear understanding. We build enterprise-grade audio enhancement and structural transcribing explicitly tailored for complex, real-world acoustic scenarios.
             </p>
-          </FadeIn>
+          </Reveal>
         </div>
       </section>
 
       {/* Leadership & Team Section */}
       <section className="py-24 border-t border-border">
         <div className="max-w-5xl mx-auto px-8 sm:px-10">
-          <FadeIn direction="up">
+          <Reveal>
             <div className="mb-20 text-center max-w-2xl mx-auto">
               <h2 className="font-serif text-4xl font-semibold tracking-tight mb-5 text-text">The minds behind Lectra AI</h2>
               <p className="text-muted text-[15px] leading-relaxed">
                 Our team represents a convergence of academic excellence and top-tier computing engineering from NUCES CFD, dedicated to pushing the boundaries of applied machine learning.
               </p>
             </div>
-          </FadeIn>
+          </Reveal>
 
           {/* Supervisor Card */}
-          <FadeIn direction="left" className="mb-28">
+          <Reveal direction="left" className="mb-28">
             <div className="flex flex-col lg:flex-row items-center gap-14">
               <div className="flex-1 order-2 lg:order-1">
                 <p className="label-caps text-primary mb-4">Academic Leadership</p>
@@ -137,20 +99,20 @@ export function About() {
                 </div>
               </div>
             </div>
-          </FadeIn>
+          </Reveal>
 
-          <FadeIn direction="up">
+          <Reveal>
             <div className="flex items-center gap-4 mb-16">
               <h3 className="font-serif text-2xl font-semibold tracking-tight text-text">Core development team</h3>
               <div className="flex-1 h-px bg-border"></div>
             </div>
-          </FadeIn>
+          </Reveal>
 
           <div className="flex flex-col gap-20">
             {team.map((member, idx) => {
               const isEven = idx % 2 === 0;
               return (
-                <FadeIn key={idx} direction={isEven ? "right" : "left"} delay={idx * 100}>
+                <Reveal key={idx} direction={isEven ? "right" : "left"} delay={idx * 0.1}>
                   <div className={`flex flex-col gap-10 items-center ${isEven ? 'md:flex-row' : 'md:flex-row-reverse'}`}>
 
                     <div className="w-full md:w-5/12 lg:w-1/3">
@@ -193,7 +155,7 @@ export function About() {
                     </div>
 
                   </div>
-                </FadeIn>
+                </Reveal>
               );
             })}
           </div>
@@ -202,7 +164,7 @@ export function About() {
 
       {/* CTA Section */}
       <section className="py-28 border-t border-border">
-        <FadeIn direction="up">
+        <Reveal>
           <div className="max-w-2xl mx-auto px-8 sm:px-10 text-center">
             <h2 className="font-serif text-4xl font-semibold tracking-tight mb-6 text-text">Experience the difference</h2>
             <p className="text-lg text-muted mb-10 leading-relaxed">
@@ -227,7 +189,7 @@ export function About() {
               </a>
             </div>
           </div>
-        </FadeIn>
+        </Reveal>
       </section>
     </div>
   );

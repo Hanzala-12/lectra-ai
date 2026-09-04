@@ -8,6 +8,8 @@ import {
   UploadCloud,
 } from 'lucide-react';
 import { api, getToken, type LectureSummary, type Student } from '../lib/api';
+import { Reveal, StaggerGroup, StaggerItem } from '../components/Reveal';
+import { NumberTicker } from '../components/ui/number-ticker';
 
 function formatDate(ts?: number) {
   if (!ts) return 'Unknown date';
@@ -86,7 +88,7 @@ export function Dashboard() {
 
   return (
     <div className="max-w-6xl mx-auto px-8 sm:px-10 py-10 md:pl-6">
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between mb-10">
+      <Reveal className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between mb-10">
         <div>
           <p className="label-caps text-primary mb-3">
             {greeting()}{firstName ? `, ${firstName}` : ''}
@@ -109,17 +111,17 @@ export function Dashboard() {
             </Link>
           )}
         </div>
-      </div>
+      </Reveal>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-12 pb-10 border-b border-border">
-        <Stat label="Lectures" value={lectures.length} />
-        <Stat label="Notes ready" value={stats.notes} />
-        <Stat label="Quizzes ready" value={stats.quizzes} />
-        <Stat label="Analyzed" value={stats.analyzed} />
-      </div>
+      <StaggerGroup className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-12 pb-10 border-b border-border">
+        <StaggerItem><Stat label="Lectures" value={lectures.length} /></StaggerItem>
+        <StaggerItem><Stat label="Notes ready" value={stats.notes} /></StaggerItem>
+        <StaggerItem><Stat label="Quizzes ready" value={stats.quizzes} /></StaggerItem>
+        <StaggerItem><Stat label="Analyzed" value={stats.analyzed} /></StaggerItem>
+      </StaggerGroup>
 
       {lectures.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border2 bg-surface p-12 text-center">
+        <Reveal delay={0.1} className="rounded-lg border border-dashed border-border2 bg-surface p-12 text-center">
           <div className="w-14 h-14 rounded-full bg-primary-light flex items-center justify-center mx-auto mb-5">
             <UploadCloud className="w-6 h-6 text-primary" />
           </div>
@@ -133,7 +135,7 @@ export function Dashboard() {
           >
             <UploadCloud className="w-4 h-4" /> Upload a lecture
           </Link>
-        </div>
+        </Reveal>
       ) : (
         <div className="grid lg:grid-cols-[1fr_320px] gap-14">
           <div>
@@ -143,26 +145,27 @@ export function Dashboard() {
                 View all <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
-            <div className="divide-y divide-border">
+            <StaggerGroup className="divide-y divide-border">
               {lectures.slice(0, 5).map((lecture) => (
-                <Link
-                  key={lecture.id}
-                  to={`/app/lecture/${lecture.id}`}
-                  className="flex items-center justify-between gap-4 py-4 group"
-                >
-                  <div className="min-w-0">
-                    <h3 className="font-serif font-semibold text-text truncate group-hover:text-primary transition-colors">{lecture.title}</h3>
-                    <p className="text-xs text-muted flex items-center gap-1.5 mt-1">
-                      <Clock className="w-3 h-3" /> {formatDuration(lecture.duration)} · {lecture.word_count.toLocaleString()} words · {formatDate(lecture.created_at)}
-                    </p>
-                  </div>
-                  <ArtifactBadges lecture={lecture} />
-                </Link>
+                <StaggerItem key={lecture.id}>
+                  <Link
+                    to={`/app/lecture/${lecture.id}`}
+                    className="flex items-center justify-between gap-4 py-4 px-3 -mx-3 rounded-lg group hover:bg-surface transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <h3 className="font-serif font-semibold text-text truncate group-hover:text-primary transition-colors">{lecture.title}</h3>
+                      <p className="text-xs text-muted flex items-center gap-1.5 mt-1">
+                        <Clock className="w-3 h-3" /> {formatDuration(lecture.duration)} · {lecture.word_count.toLocaleString()} words · {formatDate(lecture.created_at)}
+                      </p>
+                    </div>
+                    <ArtifactBadges lecture={lecture} />
+                  </Link>
+                </StaggerItem>
               ))}
-            </div>
+            </StaggerGroup>
           </div>
 
-          <div>
+          <Reveal delay={0.15} direction="right">
             <h2 className="font-serif text-2xl font-semibold text-text mb-5">Study readiness</h2>
             <div className="bg-surface rounded-lg p-6">
               <div className="relative w-32 h-32 mx-auto mb-6">
@@ -175,7 +178,9 @@ export function Dashboard() {
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="font-serif text-3xl font-semibold text-text">{stats.completion}%</span>
+                  <span className="font-serif text-3xl font-semibold text-text">
+                    <NumberTicker value={stats.completion} className="font-serif text-3xl font-semibold text-text tabular-nums" />%
+                  </span>
                 </div>
               </div>
               <div className="space-y-2.5 text-sm mb-6">
@@ -188,7 +193,7 @@ export function Dashboard() {
                 <span className="font-semibold text-text">{Math.floor(stats.totalMinutes / 60)}h {stats.totalMinutes % 60}m</span> recorded.
               </p>
             </div>
-          </div>
+          </Reveal>
         </div>
       )}
     </div>
@@ -244,7 +249,9 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div>
       <p className="label-caps text-muted mb-2">{label}</p>
-      <p className="font-serif text-4xl font-semibold text-text">{value}</p>
+      <p className="font-serif text-4xl font-semibold text-text">
+        <NumberTicker value={value} className="font-serif text-4xl font-semibold text-text tabular-nums" />
+      </p>
     </div>
   );
 }

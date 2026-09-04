@@ -17,21 +17,38 @@ import { motion, type Variants } from 'motion/react';
 
 const EASE_OUT: [number, number, number, number] = [0.21, 0.47, 0.32, 0.98];
 
+type Direction = 'up' | 'down' | 'left' | 'right';
+
+function directionOffset(direction: Direction, distance: number) {
+  switch (direction) {
+    case 'up':
+      return { y: distance };
+    case 'down':
+      return { y: -distance };
+    case 'left':
+      return { x: distance };
+    case 'right':
+      return { x: -distance };
+  }
+}
+
 interface RevealProps {
   children: ReactNode;
   className?: string;
   /** Stagger offset in seconds when used standalone (not inside a group). */
   delay?: number;
-  /** Starting vertical offset in px. */
-  y?: number;
+  /** Which edge the content travels in from. Defaults to 'up' (rises into place). */
+  direction?: Direction;
+  /** Distance traveled during the entrance, in px. */
+  distance?: number;
 }
 
-export function Reveal({ children, className, delay = 0, y = 18 }: RevealProps) {
+export function Reveal({ children, className, delay = 0, direction = 'up', distance = 18 }: RevealProps) {
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, ...directionOffset(direction, distance) }}
+      whileInView={{ opacity: 1, x: 0, y: 0 }}
       viewport={{ once: true, margin: '-80px' }}
       transition={{ duration: 0.6, delay, ease: EASE_OUT }}
     >

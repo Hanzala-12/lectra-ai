@@ -82,12 +82,19 @@ export function AppLayout() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-primary-light text-primary-dark font-semibold'
+                      ? 'text-primary-dark font-semibold'
                       : 'text-muted hover:bg-surface2 hover:text-text'
                   }`}
                 >
+                  {isActive && (
+                    <motion.div
+                      layoutId="sidebar-active-pill"
+                      className="absolute inset-0 -z-10 rounded-lg bg-primary-light"
+                      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                    />
+                  )}
                   {item.icon}
                   {item.label}
                 </Link>
@@ -150,8 +157,15 @@ export function AppLayout() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium whitespace-nowrap text-sm transition-colors shrink-0 ${isActive ? 'bg-primary-light text-primary-dark' : 'bg-surface2 text-muted hover:text-text'}`}
+                  className={`relative flex items-center gap-2 px-4 py-2 rounded-lg font-medium whitespace-nowrap text-sm transition-colors shrink-0 ${isActive ? 'text-primary-dark' : 'bg-surface2 text-muted hover:text-text'}`}
                 >
+                  {isActive && (
+                    <motion.div
+                      layoutId="mobile-nav-active-pill"
+                      className="absolute inset-0 -z-10 rounded-lg bg-primary-light"
+                      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                    />
+                  )}
                   {item.icon}
                   {item.label}
                 </Link>
