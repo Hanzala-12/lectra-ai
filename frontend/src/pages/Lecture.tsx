@@ -7,11 +7,12 @@ import {
   FileText, NotebookPen, HelpCircle, CalendarDays, BarChart3, MessageSquare,
   Loader2, AlertCircle, RefreshCw, Send, CheckCircle2, XCircle, ArrowLeft,
   Music, Sparkles, Users, Clock, Sparkle, Pencil, X, Download, Headphones, ChevronDown,
+  Plus,
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
   type Schedule, type Evaluation, type AudioFile, type ReviewState, type TranscriptSegment,
-  type ReferenceNote,
+  type ReferenceNote, type ReferenceFile,
 } from '../lib/api';
 import { Reveal, StaggerGroup, StaggerItem } from '../components/Reveal';
 import { NumberTicker } from '../components/ui/number-ticker';
@@ -247,7 +248,14 @@ export function Lecture() {
           {tab === 'quiz' && <QuizTab id={id} initial={lecture.quiz} initialQuizId={lecture.quiz_id} />}
           {tab === 'schedule' && <ScheduleTab id={id} initial={lecture.schedule} initialReviewState={lecture.review_state} />}
           {tab === 'evaluation' && <EvaluationTab id={id} initial={lecture.evaluation} />}
-          {tab === 'chat' && <ChatTab id={id} history={lecture.chat_history} initialReferenceNotes={lecture.reference_notes} />}
+          {tab === 'chat' && (
+            <ChatTab
+              id={id}
+              history={lecture.chat_history}
+              initialReferenceNotes={lecture.reference_notes}
+              initialReferenceFiles={lecture.reference_files}
+            />
+          )}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -852,7 +860,12 @@ function EvaluationTab({ id, initial }: { id: string; initial: Evaluation | null
 }
 
 // ----------------------------------------------------------------- Chat
-function ChatTab({ id, history, initialReferenceNotes }: { id: string; history: { question: string; answer: string }[]; initialReferenceNotes: ReferenceNote[] }) {
+function ChatTab({ id, history, initialReferenceNotes, initialReferenceFiles }: {
+  id: string;
+  history: { question: string; answer: string }[];
+  initialReferenceNotes: ReferenceNote[];
+  initialReferenceFiles: ReferenceFile[];
+}) {
   const [msgs, setMsgs] = useState<{ role: 'user' | 'ai'; text: string }[]>(
     history.flatMap((h) => [{ role: 'user' as const, text: h.question }, { role: 'ai' as const, text: h.answer }]),
   );
@@ -893,6 +906,42 @@ function ChatTab({ id, history, initialReferenceNotes }: { id: string; history: 
       setNotes(r.reference_notes);
     } catch (e: any) {
       setNoteErr(e.message);
+    }
+  };
+
+  // Uploaded PDFs — same role as reference notes (folded into RAG retrieval
+  // alongside the transcript), sourced from a file instead of typed text.
+  // Surfaced via a "+" button next to the message box rather than the
+  // Reference notes panel, since this is the attach-a-file gesture students
+  // expect from a chat UI (Claude.ai etc.), distinct from typing a note.
+  const [files, setFiles] = useState<ReferenceFile[]>(initialReferenceFiles || []);
+  const [fileBusy, setFileBusy] = useState(false);
+  const [fileErr, setFileErr] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file again later
+    if (!file) return;
+    setFileBusy(true);
+    setFileErr('');
+    try {
+      const r = await api.uploadReferenceFile(id, file);
+      setFiles(r.reference_files);
+    } catch (err: any) {
+      setFileErr(err.message);
+    } finally {
+      setFileBusy(false);
+    }
+  };
+
+  const removeFile = async (fileId: string) => {
+    setFileErr('');
+    try {
+      const r = await api.deleteReferenceFile(id, fileId);
+      setFiles(r.reference_files);
+    } catch (err: any) {
+      setFileErr(err.message);
     }
   };
   const appendToLastMsg = (delta: string) => {
@@ -1006,7 +1055,31 @@ function ChatTab({ id, history, initialReferenceNotes }: { id: string; history: 
         )}
         {busy && msgs[msgs.length - 1]?.text === '' && <Spinner label="Thinking…" />}
       </div>
+
+      {(files.length > 0 || fileErr) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {files.map((f) => (
+            <span key={f.id} className="inline-flex items-center gap-1.5 text-xs pl-2.5 pr-1.5 py-1.5 rounded-full bg-surface2 text-text">
+              <FileText className="w-3 h-3 shrink-0 text-primary" /> {f.filename}
+              <button onClick={() => removeFile(f.id)} title="Remove file" className="text-muted hover:text-error transition-colors p-0.5">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          {fileErr && <span className="text-xs text-error">{fileErr}</span>}
+        </div>
+      )}
+
       <div className="flex gap-2">
+        <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileSelect} />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={fileBusy}
+          title="Add a PDF for the chat to reference"
+          className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg bg-surface2 text-muted hover:text-primary hover:bg-primary-light/60 transition-colors disabled:opacity-50"
+        >
+          {fileBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+        </button>
         <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()}
           placeholder="Ask a question…" className="flex-1 px-4 py-2.5 rounded-lg border border-border bg-surface text-text text-sm outline-none focus:border-primary transition-colors" />
         <button className={`${btn} px-4`} onClick={send} disabled={busy}><Send className="w-4 h-4" /></button>

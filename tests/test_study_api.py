@@ -340,6 +340,176 @@ def test_reference_notes_404_for_another_students_lecture(auth):
     assert r2.status_code == 404
 
 
+# ----------------------------------------------------------------- reference files
+
+
+def _make_pdf(text: str) -> bytes:
+    """Hand-rolled minimal single-page PDF with a real extractable text
+    content stream (no reportlab dependency needed just for tests)."""
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> "
+        b"/MediaBox [0 0 612 792] /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    stream = f"BT /F1 18 Tf 50 700 Td ({text}) Tj ET".encode("latin-1")
+    objects.append(
+        b"<< /Length "
+        + str(len(stream)).encode()
+        + b" >>\nstream\n"
+        + stream
+        + b"\nendstream"
+    )
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, obj in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref_start = len(out)
+    n = len(objects) + 1
+    out += f"xref\n0 {n}\n".encode() + b"0000000000 65535 f \n"
+    for off in offsets:
+        out += f"{off:010d} 00000 n \n".encode()
+    out += (
+        f"trailer\n<< /Size {n} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF".encode()
+    )
+    return bytes(out)
+
+
+def test_lecture_reference_files_defaults_empty(auth):
+    lec = _lecture(auth)
+    r = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers)
+    assert r.json()["reference_files"] == []
+
+
+def test_add_reference_file(auth):
+    lec = _lecture(auth)
+    pdf = _make_pdf("Mitochondria are the powerhouse of the cell.")
+    r = client.post(
+        f"/api/lecture/{lec['id']}/reference-files",
+        files={"file": ("slides.pdf", pdf, "application/pdf")},
+        headers=auth.headers,
+    )
+    assert r.status_code == 200
+    files = r.json()["reference_files"]
+    assert len(files) == 1
+    assert files[0]["filename"] == "slides.pdf"
+    assert files[0]["char_count"] > 0
+    assert files[0]["id"]
+    assert files[0]["created_at"]
+    assert "text" not in files[0]  # raw extracted text not echoed back
+
+    # persisted
+    r2 = client.get(f"/api/lecture/{lec['id']}", headers=auth.headers)
+    assert len(r2.json()["reference_files"]) == 1
+
+
+def test_add_reference_file_rejects_non_pdf(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        f"/api/lecture/{lec['id']}/reference-files",
+        files={"file": ("notes.txt", b"plain text", "text/plain")},
+        headers=auth.headers,
+    )
+    assert r.status_code == 400
+
+
+def test_add_reference_file_rejects_unreadable_pdf(auth):
+    """A scanned/image-only PDF (no text layer) is rejected with a clear
+    error instead of silently storing an empty, useless entry."""
+    lec = _lecture(auth)
+    empty_pdf = _make_pdf("")
+    r = client.post(
+        f"/api/lecture/{lec['id']}/reference-files",
+        files={"file": ("scanned.pdf", empty_pdf, "application/pdf")},
+        headers=auth.headers,
+    )
+    assert r.status_code == 400
+    assert "text" in r.json()["detail"].lower()
+
+
+def test_delete_reference_file(auth):
+    lec = _lecture(auth)
+    pdf = _make_pdf("Some reasonably long placeholder content for the test PDF.")
+    add = client.post(
+        f"/api/lecture/{lec['id']}/reference-files",
+        files={"file": ("delete-me.pdf", pdf, "application/pdf")},
+        headers=auth.headers,
+    )
+    file_id = add.json()["reference_files"][0]["id"]
+
+    r = client.delete(
+        f"/api/lecture/{lec['id']}/reference-files/{file_id}", headers=auth.headers
+    )
+    assert r.status_code == 200
+    assert r.json()["reference_files"] == []
+
+
+def test_delete_reference_file_leaves_others(auth):
+    lec = _lecture(auth)
+    pdf = _make_pdf("Some reasonably long placeholder content for the test PDF.")
+    client.post(
+        f"/api/lecture/{lec['id']}/reference-files",
+        files={"file": ("keep-me.pdf", pdf, "application/pdf")},
+        headers=auth.headers,
+    )
+    add2 = client.post(
+        f"/api/lecture/{lec['id']}/reference-files",
+        files={"file": ("remove-me.pdf", pdf, "application/pdf")},
+        headers=auth.headers,
+    )
+    file_id = add2.json()["reference_files"][1]["id"]
+
+    r = client.delete(
+        f"/api/lecture/{lec['id']}/reference-files/{file_id}", headers=auth.headers
+    )
+    remaining = [f["filename"] for f in r.json()["reference_files"]]
+    assert remaining == ["keep-me.pdf"]
+
+
+def test_reference_files_404_for_another_students_lecture(auth):
+    lec = _lecture(auth)
+    r = client.post(
+        "/api/auth/signup",
+        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+    )
+    other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
+
+    pdf = _make_pdf("Some reasonably long placeholder content for the test PDF.")
+    r2 = client.post(
+        f"/api/lecture/{lec['id']}/reference-files",
+        files={"file": ("sneaky.pdf", pdf, "application/pdf")},
+        headers=other_headers,
+    )
+    assert r2.status_code == 404
+
+
+def test_chat_retrieval_includes_reference_files(auth):
+    """An uploaded PDF is retrievable by the chatbot alongside the
+    transcript and any reference notes, tagged so it's distinguishable in
+    the prompt the LLM actually sees. Uses a nonsense term that can't appear
+    in the (photosynthesis) transcript, so a match in the returned sources
+    can only have come from the file."""
+    lec = _lecture(auth)
+    pdf = _make_pdf("The Flibberdoo constant equals seventeen in this course.")
+    client.post(
+        f"/api/lecture/{lec['id']}/reference-files",
+        files={"file": ("slides.pdf", pdf, "application/pdf")},
+        headers=auth.headers,
+    )
+
+    r = client.post(
+        f"/api/lecture/{lec['id']}/chat",
+        json={"question": "What is the Flibberdoo constant?", "top_k": 4},
+        headers=auth.headers,
+    )
+    assert r.status_code == 200
+    sources_text = " ".join(s["text"] for s in r.json()["sources"])
+    assert "Flibberdoo constant equals seventeen" in sources_text
+    assert "[Uploaded file: slides.pdf]" in sources_text
+
+
 # ----------------------------------------------------------------- generators
 
 

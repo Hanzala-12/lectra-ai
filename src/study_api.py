@@ -30,10 +30,11 @@ import time
 import uuid
 from typing import List, Optional, Any
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from document_extractor import extract_pdf_text
 from llm_client import get_llm, LLMNotConfigured
 from lecture_repository import get_repository
 from rag_engine import RagEngine, build_context, chunk_text
@@ -159,6 +160,7 @@ def _enrich_lecture(rec: dict) -> dict:
     rec.setdefault("recap_script", None)
     rec.setdefault("recap_audio_url", None)
     rec.setdefault("reference_notes", [])
+    rec.setdefault("reference_files", [])
 
     # Real SM-2 state computed fresh from actual quiz history every time —
     # never persisted, so it's always in sync with the latest attempt (see
@@ -270,6 +272,75 @@ async def delete_reference_note(
     notes = [n for n in (rec.get("reference_notes") or []) if n.get("id") != note_id]
     updated = get_repository().update(lecture_id, reference_notes=notes)
     return {"reference_notes": updated.get("reference_notes", [])}
+
+
+@router.post("/lecture/{lecture_id}/reference-files")
+async def add_reference_file(
+    lecture_id: str,
+    file: UploadFile = File(...),
+    student_id: str = Depends(get_current_student),
+):
+    """Add a student-uploaded reference file (PDF only for now). Same role as
+    add_reference_note — folded into the chatbot's RAG retrieval alongside
+    the transcript and any reference notes (see
+    _chat_messages_and_sources) — not used by notes/quiz/schedule
+    generation, chat only."""
+    rec = _lecture_or_404(lecture_id, student_id)
+
+    filename = file.filename or "document.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400, detail="Only PDF files are supported right now"
+        )
+
+    max_bytes = int(os.getenv("MAX_FILE_SIZE_MB", "500")) * 1024 * 1024
+    content = await file.read()
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size: {max_bytes // (1024 * 1024)}MB",
+        )
+
+    try:
+        text = extract_pdf_text(content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    files = list(rec.get("reference_files") or [])
+    files.append(
+        {
+            "id": uuid.uuid4().hex[:12],
+            "filename": filename,
+            "text": text,
+            "char_count": len(text),
+            "created_at": time.time(),
+        }
+    )
+    updated = get_repository().update(lecture_id, reference_files=files)
+    # Don't echo the full extracted text back — the client only needs metadata.
+    return {
+        "reference_files": [
+            {k: v for k, v in f.items() if k != "text"}
+            for f in updated.get("reference_files", [])
+        ]
+    }
+
+
+@router.delete("/lecture/{lecture_id}/reference-files/{file_id}")
+async def delete_reference_file(
+    lecture_id: str,
+    file_id: str,
+    student_id: str = Depends(get_current_student),
+):
+    rec = _lecture_or_404(lecture_id, student_id)
+    files = [f for f in (rec.get("reference_files") or []) if f.get("id") != file_id]
+    updated = get_repository().update(lecture_id, reference_files=files)
+    return {
+        "reference_files": [
+            {k: v for k, v in f.items() if k != "text"}
+            for f in updated.get("reference_files", [])
+        ]
+    }
 
 
 @router.delete("/lecture/{lecture_id}")
@@ -526,28 +597,36 @@ def _chat_messages_and_sources(rec: dict, question: str, top_k: int):
     """Shared between the blocking and streaming chat routes so the two
     prompts can't drift apart.
 
-    Retrieval draws on the transcript AND any reference notes the student
-    has added (see AddReferenceNoteRequest / reference_notes on the lecture
-    record) — each note is folded in as its own retrievable chunk, tagged
-    inline so a retrieved note is distinguishable from transcript prose in
-    the prompt the LLM actually sees, without needing any change to
-    RagEngine itself (it stays a generic "chunks in, ranked chunks out"
-    component)."""
+    Retrieval draws on the transcript, any typed reference notes, AND any
+    uploaded reference files (see AddReferenceNoteRequest / reference_notes
+    and add_reference_file / reference_files on the lecture record) — each
+    note/file is folded in as its own retrievable chunk(s), tagged inline so
+    a retrieved one is distinguishable from transcript prose in the prompt
+    the LLM actually sees, without needing any change to RagEngine itself
+    (it stays a generic "chunks in, ranked chunks out" component). A file is
+    typically much longer than a note, so it's chunked the same way the
+    transcript is rather than kept as one giant chunk."""
     chunks = chunk_text(rec["transcript_text"])
     note_chunks = [
         f"[Student's own reference note] {n['text']}"
         for n in (rec.get("reference_notes") or [])
         if n.get("text")
     ]
-    engine = RagEngine(chunks + note_chunks)
+    file_chunks = [
+        f"[Uploaded file: {f['filename']}] {c}"
+        for f in (rec.get("reference_files") or [])
+        if f.get("text")
+        for c in chunk_text(f["text"])
+    ]
+    engine = RagEngine(chunks + note_chunks + file_chunks)
     passages = engine.retrieve(question, k=top_k)
     context = build_context(passages)
     system = (
         "You are a helpful study assistant answering questions about a specific "
         "lecture. Answer ONLY using the provided context passages, which may "
-        "include both transcript excerpts and reference notes the student has "
-        "added themselves. If the answer is not in the context, say you "
-        "couldn't find it in this lecture."
+        "include transcript excerpts, reference notes, and uploaded reference "
+        "files the student has added themselves. If the answer is not in the "
+        "context, say you couldn't find it in this lecture."
     )
     prompt = f"Context from the lecture:\n{context}\n\nQuestion: {question}\n\nAnswer:"
     messages = [
