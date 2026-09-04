@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import {
   api, buildUrl, type Lecture as LectureT, type QuizQuestion, type GradeResult,
-  type Schedule, type Evaluation, type AudioFile, type ReviewState,
+  type Schedule, type Evaluation, type AudioFile, type ReviewState, type TranscriptSegment,
 } from '../lib/api';
 
 type Tab = 'transcript' | 'notes' | 'recap' | 'quiz' | 'schedule' | 'evaluation' | 'chat';
@@ -277,6 +277,18 @@ function SpeakerRenameForm({
   );
 }
 
+// Flags a transcript line as worth a second look — either the ASR model
+// itself was unsure, or the line straddles a speaker-change boundary
+// diarization couldn't cleanly resolve. Thresholds are deliberately loose
+// (only the genuinely uncertain third of the confidence range) — this is
+// meant to catch real trouble spots, not decorate half the transcript.
+function confidenceFlag(s: TranscriptSegment): string | null {
+  const flags: string[] = [];
+  if (s.asr_confidence != null && s.asr_confidence < 0.5) flags.push('lower-confidence transcription');
+  if (s.speaker_confidence != null && s.speaker_confidence < 0.6) flags.push('uncertain speaker attribution');
+  return flags.length ? flags.join(' · ') : null;
+}
+
 function TranscriptTab({ lecture }: { lecture: LectureT }) {
   const audioFiles = lecture.audio_files || [];
   const legacyAudio = lecture.metadata?.audio_url;
@@ -373,6 +385,7 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
           <div className="space-y-1 max-h-[65vh] overflow-y-auto pr-1">
             {segments.map((s, i) => {
               const isActive = i === activeIndex;
+              const flag = confidenceFlag(s);
               return (
                 <button
                   key={i}
@@ -391,6 +404,9 @@ function TranscriptTab({ lecture }: { lecture: LectureT }) {
                   <span className={`text-xs mr-2 tabular-nums ${isActive ? 'text-primary-dark/70' : 'text-muted'}`}>
                     {Math.floor(s.start / 60)}:{String(Math.floor(s.start % 60)).padStart(2, '0')}
                   </span>
+                  {flag && (
+                    <span title={`Worth double-checking: ${flag}`} className="inline-block w-1.5 h-1.5 rounded-full bg-warning mr-1.5 align-middle" />
+                  )}
                   {s.text}
                 </button>
               );

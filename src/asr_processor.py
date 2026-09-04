@@ -3,6 +3,7 @@ Automatic Speech Recognition Module
 Transcribes the cleaned audio using faster-whisper
 """
 
+import math
 import numpy as np
 from typing import Dict, List, Optional
 import logging
@@ -130,6 +131,9 @@ class ASRProcessor:
                     "start": segment.start,
                     "end": segment.end,
                     "text": segment.text,
+                    # Mean log-probability of this segment's decoded tokens —
+                    # confidence signal, see combine_with_diarization().
+                    "avg_logprob": segment.avg_logprob,
                 }
 
                 # Add word timestamps if requested
@@ -241,6 +245,7 @@ class ASRProcessor:
             start = seg["start"]
             end = seg["end"]
             text = seg["text"]
+            duration = end - start
 
             # Find overlapping speaker
             max_overlap = 0
@@ -256,8 +261,34 @@ class ASRProcessor:
                     max_overlap = overlap
                     best_speaker = dia["speaker"]
 
+            # How much of this segment's duration the winning diarization
+            # turn actually covers — 1.0 means it cleanly owns the whole
+            # segment; a lower ratio means the segment straddles a speaker
+            # change (or diarization boundary noise) and the label is a
+            # best guess rather than a clean match.
+            speaker_confidence = (max_overlap / duration) if duration > 0 else 0.0
+
+            # avg_logprob is a log-probability (typically <= 0); exponentiate
+            # to get back a probability-like value in (0, 1] that's honest
+            # about how sure the ASR model was about its own transcription of
+            # this segment. Absent on segments that predate this field
+            # (legacy transcripts) — None rather than a made-up number.
+            avg_logprob = seg.get("avg_logprob")
+            asr_confidence = (
+                round(min(1.0, math.exp(avg_logprob)), 3)
+                if avg_logprob is not None
+                else None
+            )
+
             combined.append(
-                {"start": start, "end": end, "text": text, "speaker": best_speaker}
+                {
+                    "start": start,
+                    "end": end,
+                    "text": text,
+                    "speaker": best_speaker,
+                    "asr_confidence": asr_confidence,
+                    "speaker_confidence": round(speaker_confidence, 3),
+                }
             )
 
         logger.info(f"Combined {len(combined)} transcript segments with speaker labels")

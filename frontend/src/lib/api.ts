@@ -129,6 +129,10 @@ export type TranscriptSegment = {
   end: number;
   text: string;
   speaker?: string | null;
+  // Confidence signals (src/asr_processor.py::combine_with_diarization) —
+  // null on segments from before this field existed, not "0% confident".
+  asr_confidence?: number | null; // ASR's own certainty in its transcription, 0-1
+  speaker_confidence?: number | null; // how cleanly one diarization turn covers this segment, 0-1
 };
 
 export type AudioFile = {

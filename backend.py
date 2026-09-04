@@ -560,6 +560,8 @@ async def process_audio(
                     "end": round(s.get("end", 0), 2),
                     "text": s.get("text", "").strip(),
                     "speaker": s.get("speaker", None),
+                    "asr_confidence": s.get("asr_confidence"),
+                    "speaker_confidence": s.get("speaker_confidence"),
                 }
                 for s in transcript_segments
             ],
