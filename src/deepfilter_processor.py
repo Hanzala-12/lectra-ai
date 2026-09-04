@@ -57,6 +57,37 @@ def _shim_torchaudio_backend():
     sys.modules["torchaudio.backend.common"] = common_mod
 
 
+class _force_cpu_for_df:
+    """Context manager that makes torch.cuda.is_available() lie and say
+    False for its duration, restoring the real function on exit.
+
+    Needed because deepfilternet's own df.enhance module re-resolves its
+    target device via an internal get_device() (called at *every* enhance()
+    invocation, not just once at init) that itself just checks
+    torch.cuda.is_available() - so even with the model's own weights moved
+    to CPU (self.model.to("cpu")), each enhance() call still builds fresh
+    activation tensors on cuda:0 when a GPU is genuinely present, producing
+    `RuntimeError: Input type (torch.cuda.FloatTensor) and weight type
+    (torch.FloatTensor) should be the same`. Patching get_device() directly
+    doesn't help either - it's imported into more than one internal module,
+    each capturing its own reference - but every one of those, transitively,
+    bottoms out at this same public torch API, so patching it here is both
+    the more surgical and the more complete fix. Confirmed via live testing
+    on Kaggle's GPU worker: wrapping both init_df() and every enhance() call
+    this way is what actually fixed a genuinely-reproducing crash, not
+    "cargo-culted defensive code" - see the DeepFilterProcessor device note
+    above for why the model itself is CPU-only in the first place."""
+
+    def __enter__(self):
+        self._orig = torch.cuda.is_available
+        torch.cuda.is_available = lambda: False
+        return self
+
+    def __exit__(self, *exc_info):
+        torch.cuda.is_available = self._orig
+        return False
+
+
 class DeepFilterProcessor:
     """DeepFilterNet-based noise reduction"""
 
@@ -131,11 +162,12 @@ class DeepFilterProcessor:
             # for Piper/pyannote's models.
             has_cached_model = os.path.exists(os.path.join(df_cache_dir, "config.ini"))
 
-            self.model, self.df_state, _ = init_df(
-                model_base_dir=df_cache_dir if has_cached_model else None,
-                post_filter=self.post_filter,
-                config_allow_defaults=True,
-            )
+            with _force_cpu_for_df():
+                self.model, self.df_state, _ = init_df(
+                    model_base_dir=df_cache_dir if has_cached_model else None,
+                    post_filter=self.post_filter,
+                    config_allow_defaults=True,
+                )
 
             self.model.to(self.device)
             self.enhance = enhance
@@ -169,7 +201,7 @@ class DeepFilterProcessor:
         audio_tensor = torch.from_numpy(audio).unsqueeze(0).to(self.device)
 
         # Pass 1: enhance — atten_lim_db=100 allows up to 100dB of attenuation (fully aggressive)
-        with torch.no_grad():
+        with torch.no_grad(), _force_cpu_for_df():
             enhanced = self.enhance(
                 self.model, self.df_state, audio_tensor, atten_lim_db=self.atten_lim_db
             )
@@ -177,7 +209,7 @@ class DeepFilterProcessor:
         # Pass 2 (optional): re-run on the already-cleaned output to scrub residual noise
         if self.double_pass:
             logger.info("Double-pass: running second enhancement pass")
-            with torch.no_grad():
+            with torch.no_grad(), _force_cpu_for_df():
                 enhanced = self.enhance(
                     self.model, self.df_state, enhanced, atten_lim_db=self.atten_lim_db
                 )
@@ -203,13 +235,13 @@ class DeepFilterProcessor:
             torch.from_numpy(audio.astype(np.float32)).unsqueeze(0).to(self.device)
         )
 
-        with torch.no_grad():
+        with torch.no_grad(), _force_cpu_for_df():
             enhanced = self.enhance(
                 self.model, self.df_state, audio_tensor, atten_lim_db=self.atten_lim_db
             )
 
         if self.double_pass:
-            with torch.no_grad():
+            with torch.no_grad(), _force_cpu_for_df():
                 enhanced = self.enhance(
                     self.model, self.df_state, enhanced, atten_lim_db=self.atten_lim_db
                 )
