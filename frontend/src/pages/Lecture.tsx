@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   FileText, NotebookPen, HelpCircle, CalendarDays, BarChart3, MessageSquare,
   Loader2, AlertCircle, RefreshCw, Send, CheckCircle2, XCircle, ArrowLeft,
@@ -24,6 +26,41 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 const card = 'rounded-lg bg-surface p-5';
 const btn = 'inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 disabled:pointer-events-none transition-colors';
 const btnGhost = 'text-sm text-muted hover:text-text inline-flex items-center gap-1.5 font-medium transition-colors';
+
+// Styled rendering for LLM-generated Markdown (notes, evaluation summaries,
+// chat answers) — these used to be dumped into a <pre> as raw text, so a
+// student saw literal "##"/"**"/"|---|" characters instead of headings, bold
+// text, and tables. Custom component overrides (not a generic .prose class)
+// so rendered notes match this app's own design language — same serif
+// headings, teal accents, and bullet/border treatment used everywhere else —
+// rather than a generic default look bolted on top of it.
+const markdownComponents = {
+  h1: ({ children }: any) => <h3 className="font-serif text-xl font-semibold text-text mt-5 mb-2.5 first:mt-0">{children}</h3>,
+  h2: ({ children }: any) => <h3 className="font-serif text-xl font-semibold text-text mt-5 mb-2.5 first:mt-0">{children}</h3>,
+  h3: ({ children }: any) => <h4 className="font-serif text-base font-semibold text-text mt-4 mb-1.5">{children}</h4>,
+  p: ({ children }: any) => <p className="text-[15px] text-text leading-relaxed mb-3 last:mb-0">{children}</p>,
+  strong: ({ children }: any) => <strong className="font-semibold text-text">{children}</strong>,
+  em: ({ children }: any) => <em className="italic">{children}</em>,
+  ul: ({ children }: any) => <ul className="space-y-1.5 mb-3.5 ml-4 list-disc list-outside marker:text-primary">{children}</ul>,
+  ol: ({ children }: any) => <ol className="space-y-1.5 mb-3.5 ml-4 list-decimal list-outside marker:text-primary marker:font-semibold">{children}</ol>,
+  li: ({ children }: any) => <li className="text-[15px] text-text leading-relaxed pl-1">{children}</li>,
+  a: ({ href, children }: any) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary-dark underline underline-offset-2">{children}</a>,
+  table: ({ children }: any) => (
+    <div className="overflow-x-auto mb-3.5 rounded-lg border border-border">
+      <table className="w-full text-sm border-collapse">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: any) => <thead className="bg-surface2">{children}</thead>,
+  th: ({ children }: any) => <th className="text-left px-3.5 py-2.5 label-caps text-muted font-semibold border-b border-border">{children}</th>,
+  td: ({ children }: any) => <td className="px-3.5 py-2.5 text-text border-b border-border/70 align-top">{children}</td>,
+  hr: () => <hr className="border-border my-4" />,
+  code: ({ children }: any) => <code className="font-mono text-[13px] bg-surface2 px-1.5 py-0.5 rounded text-primary-dark">{children}</code>,
+  blockquote: ({ children }: any) => <blockquote className="border-l-2 border-primary pl-4 italic text-muted my-3">{children}</blockquote>,
+};
+
+function Markdown({ children }: { children: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{children}</ReactMarkdown>;
+}
 
 function Spinner({ label }: { label: string }) {
   return (
@@ -441,7 +478,7 @@ function NotesTab({ id, initial }: { id: string; initial: string | null }) {
           <RefreshCw className="w-3.5 h-3.5" /> Regenerate
         </button>
       </div>
-      <div className={card}><pre className="whitespace-pre-wrap font-sans text-[15px] text-text leading-relaxed">{notes}</pre></div>
+      <div className={card}><Markdown>{notes}</Markdown></div>
     </div>
   );
 }
@@ -503,6 +540,8 @@ function RecapTab({ id, initialScript, initialAudioUrl }: { id: string; initialS
 }
 
 // ----------------------------------------------------------------- Quiz
+const QUESTION_COUNT_OPTIONS = [5, 10, 15, 20];
+
 function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQuestion[] | null; initialQuizId: string | null }) {
   const [quiz, setQuiz] = useState<QuizQuestion[] | null>(initial);
   // Quiz is a real, versioned entity now (quiz_repository.py) — track which
@@ -514,37 +553,78 @@ function QuizTab({ id, initial, initialQuizId }: { id: string; initial: QuizQues
   // question_id -> selected answer_id
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<GradeResult | null>(null);
+  const [numQuestions, setNumQuestions] = useState(5);
   const gen = (refresh = false) => {
     setLoading(true); setErr(''); setResult(null); setAnswers({});
-    api.quiz(id, 5, refresh).then((r) => { setQuiz(r.quiz); setQuizId(r.quiz_id); }).catch((e) => setErr(e.message)).finally(() => setLoading(false));
+    api.quiz(id, numQuestions, refresh).then((r) => { setQuiz(r.quiz); setQuizId(r.quiz_id); }).catch((e) => setErr(e.message)).finally(() => setLoading(false));
   };
-  useEffect(() => { if (!initial) gen(); }, []);
   const submit = () => {
     const arr = (quiz || []).map((q) => answers[q.question_id] ?? null);
     api.gradeQuiz(id, arr, quizId ?? undefined).then(setResult).catch((e) => setErr(e.message));
   };
-  if (loading) return <Spinner label="Writing a quiz from this lecture…" />;
+  if (loading) return <Spinner label={`Writing ${numQuestions} questions from this lecture…`} />;
   if (err) return <div className="space-y-3"><ErrorBox msg={err} /><button className={btn} onClick={() => gen()}>Retry</button></div>;
-  if (!quiz?.length) return <p className="text-muted text-sm">No quiz available.</p>;
+
+  const countPicker = (
+    <div className="flex gap-1.5">
+      {QUESTION_COUNT_OPTIONS.map((n) => (
+        <button
+          key={n}
+          onClick={() => setNumQuestions(n)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            numQuestions === n ? 'bg-primary text-white' : 'bg-surface2 text-text hover:bg-primary-light/60'
+          }`}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+
+  // No quiz yet — let the student choose how many questions before spending
+  // the LLM call, instead of silently always generating 5.
+  if (!quiz?.length) {
+    return (
+      <div className={`${card} max-w-md space-y-5`}>
+        <div className="flex items-center gap-2 text-text font-serif font-semibold text-lg">
+          <HelpCircle className="w-4 h-4 text-primary" /> Build a quiz
+        </div>
+        <div>
+          <label className="text-sm font-medium text-text block mb-2">How many questions?</label>
+          {countPicker}
+        </div>
+        <button className={btn} onClick={() => gen()}>Generate quiz</button>
+      </div>
+    );
+  }
+
   const answeredCount = Object.keys(answers).length;
   return (
     <div className="space-y-4">
       {result && (
-        <div className={`${card} flex items-center gap-5`}>
-          <div className="relative w-16 h-16 shrink-0">
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-surface2)" strokeWidth="10" />
-              <circle cx="50" cy="50" r="42" fill="none" stroke={result.score >= 70 ? 'var(--color-primary)' : 'var(--color-accent)'} strokeWidth="10" strokeDasharray={`${result.score * 2.64} 264`} />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-text">{Math.round(result.score)}%</div>
+        <div className={`${card} space-y-4`}>
+          <div className="flex items-center gap-5">
+            <div className="relative w-16 h-16 shrink-0">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-surface2)" strokeWidth="10" />
+                <circle cx="50" cy="50" r="42" fill="none" stroke={result.score >= 70 ? 'var(--color-primary)' : 'var(--color-accent)'} strokeWidth="10" strokeDasharray={`${result.score * 2.64} 264`} />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-text">{Math.round(result.score)}%</div>
+            </div>
+            <div className="flex-1">
+              <p className="font-serif font-semibold text-lg text-text">{result.correct} of {result.total} correct</p>
+              <p className="text-sm text-muted">{result.score >= 70 ? 'Nice work — you know this material.' : 'Review the explanations below, then try a new quiz.'}</p>
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="font-serif font-semibold text-lg text-text">{result.correct} of {result.total} correct</p>
-            <p className="text-sm text-muted">{result.score >= 70 ? 'Nice work — you know this material.' : 'Review the explanations below, then try a new quiz.'}</p>
+          <div className="flex items-center justify-between pt-4 border-t border-border">
+            <div>
+              <p className="text-xs text-muted mb-1.5">Next quiz — how many questions?</p>
+              {countPicker}
+            </div>
+            <button className={btnGhost} onClick={() => gen(true)}>
+              <RefreshCw className="w-3.5 h-3.5" /> New quiz
+            </button>
           </div>
-          <button className={btnGhost} onClick={() => gen(true)}>
-            <RefreshCw className="w-3.5 h-3.5" /> New quiz
-          </button>
         </div>
       )}
       {quiz.map((q, qi) => {
@@ -720,7 +800,7 @@ function EvaluationTab({ id, initial }: { id: string; initial: Evaluation | null
           <p className="font-serif text-text font-semibold text-2xl">{ev.estimated_study_minutes} min</p>
         </div>
       </div>
-      <div className={card}><p className="font-serif font-semibold text-lg text-text mb-2">Summary</p><p className="text-[15px] text-muted leading-relaxed">{ev.summary}</p></div>
+      <div className={card}><p className="font-serif font-semibold text-lg text-text mb-2">Summary</p><Markdown>{ev.summary}</Markdown></div>
       <div className={card}>
         <p className="font-serif font-semibold text-lg text-text mb-2.5">Main topics</p>
         <div className="flex flex-wrap gap-2">{ev.main_topics?.map((t, i) => <span key={i} className="text-xs px-2.5 py-1.5 rounded-full bg-primary-light text-primary-dark font-medium">{t}</span>)}</div>
@@ -793,7 +873,7 @@ function ChatTab({ id, history }: { id: string; history: { question: string; ans
           ) : (
             <div key={i}>
               <p className="label-caps text-primary mb-1.5">Lectra</p>
-              <p className="text-[15px] text-text leading-relaxed">{m.text}</p>
+              <Markdown>{m.text}</Markdown>
             </div>
           ),
         )}
