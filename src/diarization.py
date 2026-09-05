@@ -13,6 +13,50 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _shim_torchaudio_legacy_api():
+    """Newer torchaudio (2.x on recent Python - e.g. Kaggle's preinstalled
+    build) dropped the old backend-selection API entirely: no
+    `torchaudio.AudioMetaData`, `list_audio_backends`, `get_audio_backend`,
+    or `set_audio_backend`. pyannote.audio 3.3.x (and speechbrain under it)
+    still call all four at import/init time, so without this the whole
+    diarization pipeline fails to load with e.g. `module 'torchaudio' has
+    no attribute 'list_audio_backends'` - not a real missing dependency,
+    just an API-shape mismatch (confirmed live: this exact torchaudio build
+    already dispatches to soundfile/sox under the hood, it just no longer
+    exposes the old backend-name functions applications used to call).
+    Same "compat shim before the real import" pattern already used for
+    torchaudio.backend.common in deepfilter_processor.py - that shim only
+    covers DeepFilterNet's own (older-style) import path, not this one, so
+    both are needed. No-ops per-attribute if the real one still exists."""
+    import torchaudio
+
+    if not hasattr(torchaudio, "AudioMetaData"):
+
+        class AudioMetaData:
+            def __init__(
+                self,
+                sample_rate,
+                num_frames,
+                num_channels,
+                bits_per_sample=0,
+                encoding="",
+            ):
+                self.sample_rate = sample_rate
+                self.num_frames = num_frames
+                self.num_channels = num_channels
+                self.bits_per_sample = bits_per_sample
+                self.encoding = encoding
+
+        torchaudio.AudioMetaData = AudioMetaData
+
+    if not hasattr(torchaudio, "list_audio_backends"):
+        torchaudio.list_audio_backends = lambda: ["soundfile"]
+    if not hasattr(torchaudio, "get_audio_backend"):
+        torchaudio.get_audio_backend = lambda: "soundfile"
+    if not hasattr(torchaudio, "set_audio_backend"):
+        torchaudio.set_audio_backend = lambda name: None
+
+
 class SpeakerDiarization:
     """Speaker diarization using pyannote.audio"""
 
@@ -94,6 +138,7 @@ class SpeakerDiarization:
                     mod.snapshot_download = _patched_snapshot
             # ----------------------------------------------------------------
 
+            _shim_torchaudio_legacy_api()
             from pyannote.audio import Pipeline
 
             # Set local models directory
