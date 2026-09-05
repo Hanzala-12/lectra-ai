@@ -139,31 +139,41 @@ class SpeakerDiarization:
             # ----------------------------------------------------------------
 
             _shim_torchaudio_legacy_api()
+
+            def _clear_stale_speechbrain():
+                # On this Kaggle image, pyannote.audio 3.3.x's own import
+                # chain sometimes leaves speechbrain half-imported the
+                # first time in a process - `sys.modules['speechbrain']`
+                # gets cached before speechbrain/core.py finishes running,
+                # so its own `sb.utils.quirks.apply_quirks()` call
+                # (speechbrain's __init__.py, referencing itself as a
+                # fully-imported package) raises "partially initialized
+                # module 'speechbrain' has no attribute 'utils' (most
+                # likely due to a circular import)". Confirmed live, twice,
+                # in fresh kernels: not deterministic/unfixable - clearing
+                # the poisoned sys.modules entries and re-importing from
+                # scratch succeeds every time. Confirmed live that this can
+                # surface either from the bare `import Pipeline` or later,
+                # from `Pipeline.from_pretrained()` (which lazily pulls in
+                # speechbrain-based embedding models) - callers retry
+                # around whichever line actually triggers it.
+                for mod_name in list(sys.modules):
+                    if mod_name == "speechbrain" or mod_name.startswith("speechbrain."):
+                        del sys.modules[mod_name]
+
+            def _is_stale_speechbrain_error(e: Exception) -> bool:
+                return "speechbrain" in str(e) and "circular import" in str(e)
+
             try:
                 from pyannote.audio import Pipeline
             except AttributeError as e:
-                # On this Kaggle image, pyannote.audio 3.3.x's own import
-                # chain sometimes leaves speechbrain half-imported the
-                # first time - `sys.modules['speechbrain']` gets cached
-                # before speechbrain/core.py finishes running, so its own
-                # `sb.utils.quirks.apply_quirks()` call (speechbrain's
-                # __init__.py, referencing itself as a fully-imported
-                # package) raises "partially initialized module
-                # 'speechbrain' has no attribute 'utils' (most likely due
-                # to a circular import)". Confirmed live: not
-                # deterministic/unfixable - clearing the poisoned
-                # sys.modules entries and re-importing from scratch
-                # succeeds every time. Only retry for this specific error;
-                # anything else should still surface normally.
-                if "speechbrain" not in str(e) or "circular import" not in str(e):
+                if not _is_stale_speechbrain_error(e):
                     raise
                 logger.warning(
                     f"pyannote import hit a stale speechbrain import "
                     f"({e}) - clearing sys.modules and retrying once"
                 )
-                for mod_name in list(sys.modules):
-                    if mod_name == "speechbrain" or mod_name.startswith("speechbrain."):
-                        del sys.modules[mod_name]
+                _clear_stale_speechbrain()
                 from pyannote.audio import Pipeline
 
             # Set local models directory
@@ -202,11 +212,25 @@ class SpeakerDiarization:
                     "Models found locally — loading offline (no HuggingFace network calls)"
                 )
 
-            self.pipeline = Pipeline.from_pretrained(
-                "pyannote/speaker-diarization-3.1",
-                use_auth_token=hf_token,
-                cache_dir=str(models_dir),
-            )
+            try:
+                self.pipeline = Pipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    use_auth_token=hf_token,
+                    cache_dir=str(models_dir),
+                )
+            except AttributeError as e:
+                if not _is_stale_speechbrain_error(e):
+                    raise
+                logger.warning(
+                    f"Pipeline.from_pretrained hit a stale speechbrain "
+                    f"import ({e}) - clearing sys.modules and retrying once"
+                )
+                _clear_stale_speechbrain()
+                self.pipeline = Pipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    use_auth_token=hf_token,
+                    cache_dir=str(models_dir),
+                )
 
             self.pipeline.to(torch.device(self.device))
 
