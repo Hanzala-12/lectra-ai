@@ -139,7 +139,32 @@ class SpeakerDiarization:
             # ----------------------------------------------------------------
 
             _shim_torchaudio_legacy_api()
-            from pyannote.audio import Pipeline
+            try:
+                from pyannote.audio import Pipeline
+            except AttributeError as e:
+                # On this Kaggle image, pyannote.audio 3.3.x's own import
+                # chain sometimes leaves speechbrain half-imported the
+                # first time - `sys.modules['speechbrain']` gets cached
+                # before speechbrain/core.py finishes running, so its own
+                # `sb.utils.quirks.apply_quirks()` call (speechbrain's
+                # __init__.py, referencing itself as a fully-imported
+                # package) raises "partially initialized module
+                # 'speechbrain' has no attribute 'utils' (most likely due
+                # to a circular import)". Confirmed live: not
+                # deterministic/unfixable - clearing the poisoned
+                # sys.modules entries and re-importing from scratch
+                # succeeds every time. Only retry for this specific error;
+                # anything else should still surface normally.
+                if "speechbrain" not in str(e) or "circular import" not in str(e):
+                    raise
+                logger.warning(
+                    f"pyannote import hit a stale speechbrain import "
+                    f"({e}) - clearing sys.modules and retrying once"
+                )
+                for mod_name in list(sys.modules):
+                    if mod_name == "speechbrain" or mod_name.startswith("speechbrain."):
+                        del sys.modules[mod_name]
+                from pyannote.audio import Pipeline
 
             # Set local models directory
             project_root = Path(__file__).parent.parent
