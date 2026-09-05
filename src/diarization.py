@@ -289,11 +289,7 @@ class SpeakerDiarization:
             )
 
             # Convert to list format
-            segments = []
-            for turn, _, speaker in diarization.itertracks(yield_label=True):
-                segments.append(
-                    {"start": turn.start, "end": turn.end, "speaker": speaker}
-                )
+            segments = self._segments_from_annotation(diarization)
 
             n_speakers = len(set(seg["speaker"] for seg in segments))
             logger.info(
@@ -305,6 +301,89 @@ class SpeakerDiarization:
         except Exception as e:
             logger.error(f"Diarization error: {e}")
             return []
+
+    @staticmethod
+    def _segments_from_annotation(diarization) -> List[Dict]:
+        """Convert a pyannote `Annotation` into this project's plain
+        list-of-dicts segment format. Shared by diarize() and
+        diarize_with_embeddings() so both return byte-identical segment
+        shapes from the same conversion code."""
+        segments = []
+        for turn, _, speaker in diarization.itertracks(yield_label=True):
+            segments.append({"start": turn.start, "end": turn.end, "speaker": speaker})
+        return segments
+
+    def diarize_with_embeddings(
+        self, audio_path: str
+    ) -> Tuple[List[Dict], Dict[str, np.ndarray]]:
+        """
+        Same as diarize(), but also returns one speaker-embedding centroid
+        per detected speaker - needed by TargetVoiceIsolator (STEP 2.5 in
+        pipeline.py) to match a newly-separated audio stream back to a
+        known speaker. This is a free byproduct, not a second model or
+        pass: pyannote's pipeline already computes per-speaker embeddings
+        internally to do its own clustering regardless of this flag -
+        return_embeddings=True only changes what apply() hands back, not
+        what it computes.
+
+        diarize() itself is left completely unchanged (same call, same
+        return shape) so every existing caller/test is unaffected; only
+        pipeline.py's STEP 2 calls this instead, and only when
+        TargetVoiceIsolator is actually enabled.
+
+        Returns:
+            (segments, speaker_embeddings) - segments is exactly
+            diarize()'s usual [{'start','end','speaker'}, ...]; and
+            speaker_embeddings maps each speaker label (e.g. 'SPEAKER_00')
+            to its centroid embedding as a 1-D numpy array. Never raises -
+            falls back to (diarize()'s result, {}) if the
+            embeddings-returning call path fails for any reason, so a
+            problem here degrades to "no isolation this run", not a
+            pipeline crash.
+        """
+        if self.pipeline is None:
+            logger.warning("Diarization unavailable")
+            return [], {}
+
+        try:
+            import soundfile as sf
+
+            audio_np, sr = sf.read(audio_path, dtype="float32", always_2d=True)
+            waveform = torch.from_numpy(audio_np.T)
+            audio_input = {"waveform": waveform, "sample_rate": sr}
+
+            diarization, embeddings = self.pipeline(
+                audio_input,
+                min_speakers=self.min_speakers,
+                max_speakers=self.max_speakers,
+                return_embeddings=True,
+            )
+
+            segments = self._segments_from_annotation(diarization)
+
+            if embeddings is None:
+                embeddings = []
+            labels = diarization.labels()
+            speaker_embeddings = {
+                label: embeddings[i]
+                for i, label in enumerate(labels)
+                if i < len(embeddings)
+            }
+
+            n_speakers = len(set(seg["speaker"] for seg in segments))
+            logger.info(
+                f"Diarization complete: {n_speakers} speakers, {len(segments)} "
+                f"segments, {len(speaker_embeddings)} speaker embeddings"
+            )
+
+            return segments, speaker_embeddings
+
+        except Exception as e:
+            logger.error(
+                f"Diarization with embeddings failed ({e}) - falling back to "
+                f"plain diarize() with no embeddings"
+            )
+            return self.diarize(audio_path), {}
 
     def get_speaker_statistics(self, segments: List[Dict]) -> Dict[str, float]:
         """

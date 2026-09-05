@@ -114,4 +114,85 @@ def test_deepfilter_full_audio_mode(pipeline, tmp_path):
     assert pipeline.config["deepfilternet"]["atten_lim_db"] == 30
 
 
+def test_target_voice_isolation_is_invoked_when_enabled(pipeline, tmp_path):
+    """When a target_voice_isolator is present, STEP 2 must fetch
+    embeddings alongside diarization (diarize_with_embeddings, not the
+    plain diarize()) and STEP 2.5 must feed both into isolator.process(),
+    using ITS return value as the audio DeepFilterNet actually sees -
+    proves the wiring, not just that the module exists in isolation."""
+    audio = np.random.randn(96000).astype(np.float32)
+    pipeline.config["asr"]["skip"] = True
+    # STEP 3 applies its own independent HPF to whatever lands in a speech
+    # segment - unrelated to this test's concern (STEP 2.5's wiring), so
+    # disable it to keep the isolator's output comparable byte-for-byte.
+    pipeline.config["high_pass_filter"]["enabled"] = False
+
+    pipeline.media_loader.load_media = Mock(return_value=(audio, 48000, False))
+    pipeline.media_loader.save_audio = Mock()
+    pipeline.vad_processor.trim_silence = Mock(return_value=(audio, [(0, len(audio))]))
+
+    diarization_segments = [
+        {"start": 0.5, "end": 1.5, "speaker": "SPEAKER_00"},
+        {"start": 1.0, "end": 1.2, "speaker": "SPEAKER_01"},
+    ]
+    speaker_embeddings = {
+        "SPEAKER_00": np.array([1, 0]),
+        "SPEAKER_01": np.array([0, 1]),
+    }
+    pipeline.diarization.diarize_with_embeddings = Mock(
+        return_value=(diarization_segments, speaker_embeddings)
+    )
+    pipeline.diarization.diarize = Mock(
+        side_effect=AssertionError(
+            "plain diarize() should not be called when an isolator is active"
+        )
+    )
+    pipeline.diarization.get_speaker_statistics = Mock(
+        return_value={"SPEAKER_00": 1.0, "SPEAKER_01": 0.2}
+    )
+
+    isolated_audio = audio * 0.5  # distinguishable stand-in for isolator output
+    mock_isolator = MagicMock()
+    mock_isolator.process = Mock(return_value=isolated_audio)
+    # Bypass the real _initialize_custom_modules() (which would otherwise
+    # set this back to None, since config.yaml's target_voice_isolation is
+    # disabled by default) so this test exercises STEP 2/2.5's wiring
+    # directly rather than needing to fake an enabled config + GPU.
+    pipeline._custom_modules_initialized = True
+    pipeline.target_voice_isolator = mock_isolator
+
+    pipeline.deepfilter.sample_rate = 48000
+    pipeline.deepfilter.process_audio_native = Mock(side_effect=lambda segment: segment)
+
+    result = pipeline.process(
+        input_path="sample.wav",
+        output_dir=str(tmp_path),
+        save_transcript=False,
+    )
+
+    assert result["audio_output_path"]
+    mock_isolator.process.assert_called_once()
+    called_sr, called_diarization, called_embeddings = (
+        mock_isolator.process.call_args.args[1:]
+    )
+    assert called_sr == 48000
+    assert called_diarization == diarization_segments
+    # dict values are numpy arrays - compare key-by-key, not via dict == (a
+    # bare `==` on numpy-valued dicts raises on the ambiguous array truth value)
+    assert set(called_embeddings.keys()) == set(speaker_embeddings.keys())
+    for key in speaker_embeddings:
+        np.testing.assert_array_equal(called_embeddings[key], speaker_embeddings[key])
+
+    # DeepFilterNet must have received the ISOLATOR's output within the
+    # speech-segment region STEP 3's zero-background mask preserves (0.5s-
+    # 1.5s -> samples 24000-72000 @ 48kHz); outside diarized speech, STEP 3
+    # zeroes everything regardless of what STEP 2.5 produced - same
+    # masking every other stage already gets, unrelated to this feature.
+    processed_segment = pipeline.deepfilter.process_audio_native.call_args.args[0]
+    np.testing.assert_array_equal(
+        processed_segment[24000:72000], isolated_audio[24000:72000]
+    )
+    assert np.all(processed_segment[:24000] == 0)
+
+
 # Add more tests as needed

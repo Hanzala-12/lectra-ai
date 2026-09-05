@@ -28,7 +28,10 @@ silero-vad>=5.1.0,<7.0.0
 
 # Diarization - tightly constrained to avoid resolution issues
 pyannote.audio>=3.1.0,<3.2.0
-# Neural speech enhancement — MetricGAN+ final denoise stage (also diarization backbone)
+# Neural speech enhancement — MetricGAN+ final denoise stage (also diarization
+# backbone, and target_voice_isolation.py's SepFormer separator — that
+# checkpoint downloads on first use, same as MetricGAN+'s already does, no
+# extra package needed here)
 speechbrain>=1.0.0,<1.1.0
 lightning>=2.4.0,<2.4.1
 torchmetrics>=1.6.1,<1.7.0
