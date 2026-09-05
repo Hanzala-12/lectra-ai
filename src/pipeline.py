@@ -454,6 +454,72 @@ class LectraAIPipeline:
         else:
             self.adaptive_router = None
 
+        # Target Voice Isolation (STEP 2.5) - separates genuinely
+        # overlapping speech before DeepFilterNet/MetricGAN+ run. Needs a
+        # working diarization pipeline (its embedding model is reused for
+        # speaker matching) and, per config, a real GPU - Problem 3
+        # measured this model family at ~7x realtime on CPU for a
+        # full-file pass (see docs/NOISE_REMOVAL_AND_DIARIZATION.md
+        # "Problem 4"). Try/except-wrapped like neural_enhancer/beautify
+        # (loads a real checkpoint that can fail to download/fit in
+        # memory), but placed here among the lazy modules rather than
+        # eager _initialize_components() so its GPU memory isn't claimed
+        # until a file is actually processed.
+        tvi_cfg = self.config.get("target_voice_isolation", {})
+        self.target_voice_isolator = None
+        if tvi_cfg.get("enabled", False):
+            import torch
+
+            dia_pipeline = (
+                getattr(self.diarization, "pipeline", None)
+                if self.diarization
+                else None
+            )
+            if dia_pipeline is None:
+                logger.info(
+                    "Target Voice Isolation enabled but diarization is unavailable - skipping"
+                )
+            elif tvi_cfg.get("require_gpu", True) and not torch.cuda.is_available():
+                logger.info(
+                    "Target Voice Isolation enabled but no GPU available "
+                    "(require_gpu: true) - skipping to avoid a very slow "
+                    "CPU pass (see docs, 'Problem 3')"
+                )
+            else:
+                isolator_class = _load_optional_class(
+                    "target_voice_isolation", "TargetVoiceIsolator"
+                )
+                if isolator_class is not None:
+                    try:
+                        tvi_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        embedding_model_name = getattr(
+                            dia_pipeline,
+                            "embedding",
+                            "pyannote/wespeaker-voxceleb-resnet34-LM",
+                        )
+                        self.target_voice_isolator = isolator_class(
+                            embedding_model_name=embedding_model_name,
+                            device=tvi_device,
+                            min_overlap_duration_s=tvi_cfg.get(
+                                "min_overlap_duration_s", 0.3
+                            ),
+                            min_speaker_duration_s=tvi_cfg.get(
+                                "min_speaker_duration_s", 5.0
+                            ),
+                            match_confidence_threshold=tvi_cfg.get(
+                                "match_confidence_threshold", 0.65
+                            ),
+                            context_padding_s=tvi_cfg.get("context_padding_s", 0.5),
+                            crossfade_s=tvi_cfg.get("crossfade_s", 0.25),
+                            low_freq_gate_hz=tvi_cfg.get("low_freq_gate_hz", 150.0),
+                        )
+                        logger.info(f"Target Voice Isolation enabled on {tvi_device}")
+                    except Exception as e:
+                        logger.warning(
+                            f"Target Voice Isolation unavailable, continuing without it: {e}"
+                        )
+                        self.target_voice_isolator = None
+
         self._custom_modules_initialized = True
 
     def _merge_segments(
@@ -597,9 +663,15 @@ class LectraAIPipeline:
         sf.write(str(temp_audio_path), audio, sr)
 
         diarization_results = []
+        speaker_embeddings = {}
         if self.diarization is not None:
             try:
-                diarization_results = self.diarization.diarize(str(temp_audio_path))
+                if self.target_voice_isolator is not None:
+                    diarization_results, speaker_embeddings = (
+                        self.diarization.diarize_with_embeddings(str(temp_audio_path))
+                    )
+                else:
+                    diarization_results = self.diarization.diarize(str(temp_audio_path))
                 if diarization_results:
                     stats = self.diarization.get_speaker_statistics(diarization_results)
                     logger.info(
@@ -607,6 +679,24 @@ class LectraAIPipeline:
                     )
             except Exception as e:
                 logger.warning(f"Diarization failed, falling back to VAD: {e}")
+
+        # STEP 2.5: Target Voice Isolation (optional) — separate genuinely
+        # overlapping speech before it reaches DFN/MetricGAN+, which can
+        # only handle one voice + stationary noise (measured: -2dB change
+        # on overlapping speech vs -73.5dB on stationary noise — see
+        # docs/NOISE_REMOVAL_AND_DIARIZATION.md "Problem 4"). No-op unless
+        # enabled, a GPU is present, and diarization actually found
+        # overlap between two legitimate speakers.
+        if self.target_voice_isolator is not None and diarization_results:
+            logger.info("\nSTEP 2.5: Target Voice Isolation (overlap separation)")
+            try:
+                audio = self.target_voice_isolator.process(
+                    audio, sr, diarization_results, speaker_embeddings
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Target Voice Isolation failed, using original audio: {e}"
+                )
 
         # Build speech segments from diarization; fall back to VAD if unavailable
         if diarization_results:

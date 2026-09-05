@@ -26,7 +26,12 @@ silero-vad==5.1.2
 
 # Diarization
 pyannote.audio==3.3.2
-# Neural speech enhancement - MetricGAN+ final denoise stage (also diarization backbone)
+# Neural speech enhancement - MetricGAN+ final denoise stage (also diarization
+# backbone, and target_voice_isolation.py's SepFormer separator, when
+# target_voice_isolation.enabled is true - that checkpoint downloads on
+# first use here too, same as MetricGAN+'s already does, no extra package
+# needed - this worker's ephemeral filesystem means it re-downloads every
+# fresh Kaggle session, same as every other model this notebook uses)
 speechbrain==1.0.3
 lightning==2.4.0
 torchmetrics==1.6.1

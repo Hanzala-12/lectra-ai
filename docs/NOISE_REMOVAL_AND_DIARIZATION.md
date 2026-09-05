@@ -7,8 +7,9 @@ series of measured engineering decisions.
 
 It reflects the live code in [`src/pipeline.py`](../src/pipeline.py),
 [`src/diarization.py`](../src/diarization.py),
-[`src/deepfilter_processor.py`](../src/deepfilter_processor.py) and
-[`src/metricgan_processor.py`](../src/metricgan_processor.py), driven by
+[`src/deepfilter_processor.py`](../src/deepfilter_processor.py),
+[`src/metricgan_processor.py`](../src/metricgan_processor.py) and
+[`src/target_voice_isolation.py`](../src/target_voice_isolation.py), driven by
 [`config.yaml`](../config.yaml).
 
 ---
@@ -43,6 +44,10 @@ goes *black* on a spectrogram while the voice and consonants remain.
    ▼
 [3] DIARIZATION — who speaks when               diarization.py (pyannote 3.1)
    │     → speaker turns  (VAD fallback if unavailable)
+   ▼
+[3.5] TARGET VOICE ISOLATION (optional, off)     target_voice_isolation.py
+   │     separates genuinely overlapping speech BEFORE DFN/MetricGAN+ can't
+   │     tell "voice I want" from "voice I don't want" — see Problem 4
    ▼
 [4] Build speech segments                       _merge_segments()
    │     drop sub‑threshold • tail‑pad • merge nearby
@@ -245,6 +250,62 @@ DFN→MetricGAN+ is the optimal clean‑vs‑words operating point. The full‑b
 mix and low‑band denoise were therefore **disabled** (MetricGAN+ replaces them),
 but they remain in the code as config‑gated options.
 
+### Problem 4 — "The residual IS a competing voice this time"
+
+Problem 3 concluded "for genuinely overlapping speakers, a target‑speaker‑
+extraction stage would be the principled addition — deliberately out of scope
+here." A real user upload later hit exactly that case: a lecture with a
+student asking real, on‑topic questions overlapping the lecturer. Measured,
+not assumed:
+
+| Frame type | Original | DFN→MetricGAN+ cleaned | Change |
+|---|---|---|---|
+| Quiet‑only (stationary noise) | −29.3 dBFS | **−102.8 dBFS** | **−73.5 dB** |
+| Loud/overlapping speech | −16.1 dBFS | −18.1 dBFS | only **−2 dB** |
+
+DFN/MetricGAN+ are speech‑*preserving* denoisers — the overlapping voice is
+exactly what they're built to protect, not remove. Confirmed via the actual
+diarization output too: the "second speaker" it found had coherent,
+on‑topic transcribed lines (a real student, not noise or a diarization
+artifact) — so the gap wasn't a diarization bug, it was this pipeline
+never having a way to separate two real, simultaneous voices.
+
+**This time the separator IS the fix — but not the one Problem 3 rejected.**
+Problem 3's `sepformer-dns4-16k` is a single‑stream *enhancer* competing
+directly with MetricGAN+ at MetricGAN+'s own job (and losing, with buzz
+artifacts, on a full 140s file). [`target_voice_isolation.py`](../src/target_voice_isolation.py)
+instead uses `speechbrain/sepformer-whamr16k`, a 2‑speaker *separation*
+checkpoint, applied only to the short windows diarization flags as genuine
+overlap between two legitimate speakers (STEP 2.5, before STEP 3's masking
+and DFN/MetricGAN+) — a different task, on an order‑of‑magnitude smaller
+slice of the audio, gated behind `require_gpu: true` since Problem 3 already
+measured this model family at ~7× realtime on CPU.
+
+Honest caveat carried into the design, not papered over: the WHAMR!/WSJ0
+training data behind `sepformer-whamr16k` is scripted, clean, close‑talk read
+speech with *synthetic* injected noise/reverb — not spontaneous classroom
+audio through a laptop/phone mic. That domain shift is real, so every
+separated window is gated before being trusted, not accepted blindly:
+
+1. **Confidence gate** — the separated stream must cosine‑match a known
+   legitimate speaker's voice embedding (reusing pyannote's *own* diarization
+   embedding model — no second model loaded) above `match_confidence_threshold`.
+2. **Low‑frequency gate** — reject a stream whose energy below
+   `low_freq_gate_hz` increased versus the original — a direct, evidence‑based
+   defense against Problem 3's own measured "severe low‑freq buzz" failure
+   mode in this model family.
+3. **RMS/SNR sanity gate** — mirrors `beautify.max_snr_drop_db`'s existing
+   auto‑disable pattern: reject an anomalously quiet or loud result.
+
+Failing any gate keeps that window's original, untouched audio — this stage
+can only ever leave a window unchanged or make it better, never silently
+accept a worse result. `enabled: false` by default (new, unproven — a
+deliberate opt‑in), `require_gpu: true` (a safe no‑op on CPU-only setups).
+
+*Eval results pending live verification on a real overlapping‑speech upload
+through the actual GPU worker — to be filled in here once run, good or bad,
+the same measured‑numbers rigor as Problems 1‑3.*
+
 ---
 
 ## 6. Configuration reference
@@ -279,6 +340,13 @@ diarization:
   enabled: true
   min_speakers: 1
   max_speakers: 10
+
+# See "Problem 4" above. Off by default - opt in once the eval on your own
+# audio confirms it helps.
+target_voice_isolation:
+  enabled: false
+  require_gpu: true
+  match_confidence_threshold: 0.65
 ```
 
 **Tuning cheatsheet**

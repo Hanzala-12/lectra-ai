@@ -62,7 +62,31 @@ diarization:
   enabled: true
   min_speakers: 1
   max_speakers: 10
-  
+
+# Target Voice Isolation: separates genuinely overlapping speech (e.g. a
+# student talking over the lecturer, or voice-like background chatter)
+# BEFORE DeepFilterNet/MetricGAN+ run. Those two are speech-preserving
+# denoisers - they crush stationary noise (~-73dB measured) but cannot
+# remove a second voice, since anything voice-like is exactly what they're
+# built to protect (measured: only ~-2dB change on overlapping speech).
+# This stage runs speaker separation only on the short windows diarization
+# flags as genuinely overlapping, matches each resulting stream back to a
+# known speaker by voice embedding, and falls back to the original
+# untouched audio for that window on any low-confidence/artifact signal -
+# never risks making a non-overlapping file worse. See
+# docs/NOISE_REMOVAL_AND_DIARIZATION.md "Problem 4" for the measured
+# before/after and why this is safe despite Problem 3's earlier rejection
+# of a different SepFormer checkpoint for a different (denoising) task.
+target_voice_isolation:
+  enabled: false                     # OFF by default - new/unproven, deliberate opt-in after eval
+  require_gpu: true                  # skip (safe no-op) on CPU - measured ~7x realtime per Problem 3
+  min_overlap_duration_s: 0.3        # ignore sub-threshold overlaps, not worth the compute
+  min_speaker_duration_s: 5.0        # ignore one-off blips (cough, chair scrape) as "speakers"
+  match_confidence_threshold: 0.65   # below this, keep the original audio for that window
+  context_padding_s: 0.5             # model context padded around each window before separating
+  crossfade_s: 0.25                  # crossfade width when splicing isolated audio back in
+  low_freq_gate_hz: 150              # reject a separated stream if energy below this INCREASES
+
 asr:
   skip: false  # enabled for transcript + study assistant flow
   model: "turbo"  # tiny, base, small, medium, large, large-v3, turbo (recommended)
