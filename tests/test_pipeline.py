@@ -160,6 +160,7 @@ def test_target_voice_isolation_is_invoked_when_enabled(pipeline, tmp_path):
     # directly rather than needing to fake an enabled config + GPU.
     pipeline._custom_modules_initialized = True
     pipeline.target_voice_isolator = mock_isolator
+    pipeline.speaker_confidence_gate = None
 
     pipeline.deepfilter.sample_rate = 48000
     pipeline.deepfilter.process_audio_native = Mock(side_effect=lambda segment: segment)
@@ -193,6 +194,69 @@ def test_target_voice_isolation_is_invoked_when_enabled(pipeline, tmp_path):
         processed_segment[24000:72000], isolated_audio[24000:72000]
     )
     assert np.all(processed_segment[:24000] == 0)
+
+
+def test_speaker_confidence_gate_triggers_embeddings_fetch(pipeline, tmp_path):
+    """When ONLY a speaker_confidence_gate is present (target_voice_isolator
+    is None - the realistic deployment, since this gate is CPU-friendly and
+    target_voice_isolation is GPU-gated), STEP 2 must still fetch embeddings
+    alongside diarization (diarize_with_embeddings, not the plain diarize()).
+    Regression test for a real bug found during design: the STEP 2
+    conditional originally only checked target_voice_isolator, so a
+    gate-only deployment would silently get zero speaker_embeddings and the
+    gate would have nothing to compare against - a no-op that looks like
+    it's running."""
+    audio = np.random.randn(96000).astype(np.float32)
+    pipeline.config["asr"]["skip"] = True
+    pipeline.config["high_pass_filter"]["enabled"] = False
+
+    pipeline.media_loader.load_media = Mock(return_value=(audio, 48000, False))
+    pipeline.media_loader.save_audio = Mock()
+    pipeline.vad_processor.trim_silence = Mock(return_value=(audio, [(0, len(audio))]))
+
+    diarization_segments = [{"start": 0.0, "end": 2.0, "speaker": "SPEAKER_00"}]
+    speaker_embeddings = {"SPEAKER_00": np.array([1, 0])}
+    pipeline.diarization.diarize_with_embeddings = Mock(
+        return_value=(diarization_segments, speaker_embeddings)
+    )
+    pipeline.diarization.diarize = Mock(
+        side_effect=AssertionError(
+            "plain diarize() should not be called when a speaker_confidence_gate is active"
+        )
+    )
+    pipeline.diarization.get_speaker_statistics = Mock(return_value={"SPEAKER_00": 2.0})
+
+    mock_gate = MagicMock()
+    mock_gate.compute_gain_curve = Mock(
+        return_value=np.ones(len(audio), dtype=np.float32)
+    )
+    # Same bypass pattern as the TVI wiring test above - exercise STEP 2's
+    # wiring directly rather than needing to fake an enabled config + CPU
+    # feasibility check.
+    pipeline._custom_modules_initialized = True
+    pipeline.target_voice_isolator = None
+    pipeline.speaker_confidence_gate = mock_gate
+
+    pipeline.deepfilter.sample_rate = 48000
+    pipeline.deepfilter.process_audio_native = Mock(side_effect=lambda segment: segment)
+
+    result = pipeline.process(
+        input_path="sample.wav",
+        output_dir=str(tmp_path),
+        save_transcript=False,
+    )
+
+    assert result["audio_output_path"]
+    pipeline.diarization.diarize_with_embeddings.assert_called_once()
+    mock_gate.compute_gain_curve.assert_called_once()
+    called_audio, called_sr, called_segments, called_diarization, called_embeddings = (
+        mock_gate.compute_gain_curve.call_args.args
+    )
+    assert called_sr == 48000
+    assert called_diarization == diarization_segments
+    assert set(called_embeddings.keys()) == set(speaker_embeddings.keys())
+    for key in speaker_embeddings:
+        np.testing.assert_array_equal(called_embeddings[key], speaker_embeddings[key])
 
 
 # Add more tests as needed

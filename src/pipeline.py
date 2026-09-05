@@ -520,6 +520,77 @@ class LectraAIPipeline:
                         )
                         self.target_voice_isolator = None
 
+        # Speaker Confidence Gate - unlike target_voice_isolator (only acts
+        # on diarization-flagged overlap between 2 recognized speakers),
+        # this runs continuously across the WHOLE file, attenuating audio
+        # that doesn't confidently match a known speaker even during
+        # solo-labeled stretches (see docs/NOISE_REMOVAL_AND_DIARIZATION.md
+        # "Problem 5"). Independently enabled/configured from
+        # target_voice_isolator - deliberately does not share its embedder
+        # instance (see speaker_confidence_gate.py's module docstring).
+        # require_gpu defaults to false: measured via
+        # scripts/benchmark_speaker_confidence_gate.py at ~0.3x realtime on
+        # this project's own CPU (real cost, but sub-realtime, unlike
+        # target_voice_isolation's separator model).
+        scg_cfg = self.config.get("speaker_confidence_gate", {})
+        self.speaker_confidence_gate = None
+        if scg_cfg.get("enabled", False):
+            import torch
+
+            dia_pipeline = (
+                getattr(self.diarization, "pipeline", None)
+                if self.diarization
+                else None
+            )
+            if dia_pipeline is None:
+                logger.info(
+                    "Speaker Confidence Gate enabled but diarization is unavailable - skipping"
+                )
+            elif scg_cfg.get("require_gpu", False) and not torch.cuda.is_available():
+                logger.info(
+                    "Speaker Confidence Gate enabled but no GPU available "
+                    "(require_gpu: true) - skipping"
+                )
+            else:
+                gate_class = _load_optional_class(
+                    "speaker_confidence_gate", "SpeakerConfidenceGate"
+                )
+                if gate_class is not None:
+                    try:
+                        scg_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        embedding_model_name = getattr(
+                            dia_pipeline,
+                            "embedding",
+                            "pyannote/wespeaker-voxceleb-resnet34-LM",
+                        )
+                        self.speaker_confidence_gate = gate_class(
+                            embedding_model_name=embedding_model_name,
+                            device=scg_device,
+                            min_speaker_duration_s=scg_cfg.get(
+                                "min_speaker_duration_s", 5.0
+                            ),
+                            window_s=scg_cfg.get("window_s", 0.75),
+                            hop_s=scg_cfg.get("hop_s", 0.2),
+                            embedding_batch_size=scg_cfg.get(
+                                "embedding_batch_size", 32
+                            ),
+                            match_confidence_threshold=scg_cfg.get(
+                                "match_confidence_threshold", 0.6
+                            ),
+                            min_low_confidence_duration_s=scg_cfg.get(
+                                "min_low_confidence_duration_s", 0.6
+                            ),
+                            max_attenuation_db=scg_cfg.get("max_attenuation_db", -15.0),
+                            attack_s=scg_cfg.get("attack_s", 0.05),
+                            release_s=scg_cfg.get("release_s", 0.3),
+                        )
+                        logger.info(f"Speaker Confidence Gate enabled on {scg_device}")
+                    except Exception as e:
+                        logger.warning(
+                            f"Speaker Confidence Gate unavailable, continuing without it: {e}"
+                        )
+                        self.speaker_confidence_gate = None
+
         self._custom_modules_initialized = True
 
     def _merge_segments(
@@ -666,7 +737,10 @@ class LectraAIPipeline:
         speaker_embeddings = {}
         if self.diarization is not None:
             try:
-                if self.target_voice_isolator is not None:
+                if (
+                    self.target_voice_isolator is not None
+                    or self.speaker_confidence_gate is not None
+                ):
                     diarization_results, speaker_embeddings = (
                         self.diarization.diarize_with_embeddings(str(temp_audio_path))
                     )
@@ -744,6 +818,29 @@ class LectraAIPipeline:
         )
 
         logger.info(f"{len(speech_segments)} speech segment(s) to process")
+
+        # Speaker Confidence Gate — analyzed EARLY, on the least-processed
+        # audio (same acoustic "flavor" diarize_with_embeddings()'s
+        # centroids were computed from), applied LATE (after loudness
+        # normalization, before Voice Beautify — see that call site) so
+        # nothing in between (HPF/DFN/MetricGAN+/EQ-boost/gain-ride) can
+        # distort the comparison or fight the resulting suppression. Only
+        # the resulting gain curve (plain numbers, not audio) is carried
+        # forward. See docs/NOISE_REMOVAL_AND_DIARIZATION.md "Problem 5".
+        speaker_gain_curve = None
+        if self.speaker_confidence_gate is not None:
+            logger.info(
+                "Speaker Confidence Gate: analyzing whole-file speaker confidence"
+            )
+            try:
+                speaker_gain_curve = self.speaker_confidence_gate.compute_gain_curve(
+                    audio, sr, speech_segments, diarization_results, speaker_embeddings
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Speaker Confidence Gate analysis failed, skipping: {e}"
+                )
+                speaker_gain_curve = None
 
         # STEP 3: Place speech on a zero-background (pure silence) track
         # This eliminates ALL background noise between words and speakers.
@@ -1044,6 +1141,20 @@ class LectraAIPipeline:
             f"[loudness] output RMS: {20*np.log10(np.sqrt(np.mean(audio_after_gain**2))+1e-10):.1f} dBFS "
             f"(target {TARGET_RMS_DBFS:.0f}), peak {20*np.log10(peak+1e-10):.1f} dBFS"
         )
+
+        # Speaker Confidence Gate — apply the gain curve computed earlier
+        # (right after speech_segments was finalized) NOW, after loudness
+        # normalization/limiting: adaptive_gain_ride already ran (can't
+        # fight suppression it hasn't seen yet), the loudness makeup above
+        # is a single uniform scalar (can't differentially re-boost
+        # suppressed frames), and Voice Beautify's leveler (next) is
+        # downward-only (can't undo suppression either). len(final_audio)
+        # is invariant from STEP 1 through here, so a plain multiply needs
+        # no resampling/alignment.
+        if speaker_gain_curve is not None and len(speaker_gain_curve) == len(
+            final_audio
+        ):
+            final_audio = (final_audio * speaker_gain_curve).astype(np.float32)
 
         # STEP 5.5: Voice Beautify (post-cleaning master on speech segments only)
         out_sr = sr

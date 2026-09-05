@@ -87,6 +87,43 @@ target_voice_isolation:
   crossfade_s: 0.25                  # crossfade width when splicing isolated audio back in
   low_freq_gate_hz: 150              # reject a separated stream if energy below this INCREASES
 
+# Speaker Confidence Gate: unlike target_voice_isolation above (only acts on
+# diarization-flagged overlap between 2 RECOGNIZED speakers), this runs
+# CONTINUOUSLY across the whole file, attenuating audio that doesn't
+# confidently match a known/legitimate speaker even during stretches
+# diarization only labeled ONE speaker as active - closes the gap measured
+# live this session (a solo-lecturer stretch got only -0.3dB reduction vs.
+# true silence's -36 to -90dB, because faint background voice-like content
+# too quiet/diffuse to cluster as its own speaker turn is invisible to both
+# target_voice_isolation and DeepFilterNet/MetricGAN+). See
+# docs/NOISE_REMOVAL_AND_DIARIZATION.md "Problem 5". Touches every speech
+# frame in the file (not rare flagged windows), so the safety margin here is
+# wider: attenuation is bounded (never full silence) AND only engages after
+# a SUSTAINED run of low-confidence hops, not a single one - a brief dip
+# (cough, or genuine cross-talk between two legitimate speakers whose
+# blended embedding doesn't cleanly match either centroid) never triggers
+# it alone.
+speaker_confidence_gate:
+  enabled: false                       # OFF by default - new/unproven, deliberate opt-in after eval
+  require_gpu: false                   # measured ~0.3x realtime on this project's own CPU
+                                        # (scripts/benchmark_speaker_confidence_gate.py) - real
+                                        # cost but sub-realtime, unlike target_voice_isolation's
+                                        # separator model
+  min_speaker_duration_s: 5.0          # same "legitimate speaker" bar as target_voice_isolation
+  window_s: 0.75                       # analysis window per confidence check
+  hop_s: 0.2                           # how often confidence is re-evaluated
+  embedding_batch_size: 32             # batch windows before embedding - mirrors diarization.py's
+                                        # own embedding_batch_size; the load-bearing perf fix
+  match_confidence_threshold: 0.6      # below this, a hop "doesn't match a known speaker" -
+                                        # calibrate from real cosine-similarity distributions,
+                                        # not guessed (different comparison than
+                                        # target_voice_isolation's threshold)
+  min_low_confidence_duration_s: 0.6   # required sustained evidence before attenuation engages
+  max_attenuation_db: -15              # bounded, never full silence - protects a false positive
+                                        # on the real speaker's own atypical-sounding moment
+  attack_s: 0.05                       # how fast suppression kicks in once triggered
+  release_s: 0.3                       # how fast suppression releases (slower - avoids pumping)
+
 asr:
   skip: false  # enabled for transcript + study assistant flow
   model: "turbo"  # tiny, base, small, medium, large, large-v3, turbo (recommended)
