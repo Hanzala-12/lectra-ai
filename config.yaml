@@ -78,7 +78,7 @@ diarization:
 # before/after and why this is safe despite Problem 3's earlier rejection
 # of a different SepFormer checkpoint for a different (denoising) task.
 target_voice_isolation:
-  enabled: false                     # OFF by default - new/unproven, deliberate opt-in after eval
+  enabled: true                      # ON for live GPU-worker evaluation (see docs "Problem 4") - revisit after real results
   require_gpu: true                  # skip (safe no-op) on CPU - measured ~7x realtime per Problem 3
   min_overlap_duration_s: 0.3        # ignore sub-threshold overlaps, not worth the compute
   min_speaker_duration_s: 5.0        # ignore one-off blips (cough, chair scrape) as "speakers"
