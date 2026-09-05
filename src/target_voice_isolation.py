@@ -160,7 +160,9 @@ def _rms(waveform: np.ndarray) -> float:
     return float(np.sqrt(np.mean(waveform.astype(np.float64) ** 2)))
 
 
-def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Public (not module-private) since speaker_confidence_gate.py also
+    imports this across the module boundary."""
     a = np.asarray(a).reshape(-1)
     b = np.asarray(b).reshape(-1)
     denom = (np.linalg.norm(a) * np.linalg.norm(b)) + 1e-10
@@ -395,7 +397,7 @@ class TargetVoiceIsolator:
             if emb is None:
                 continue
             sims = {
-                speaker: _cosine_similarity(emb, centroid)
+                speaker: cosine_similarity(emb, centroid)
                 for speaker, centroid in legitimate_embeddings.items()
             }
             top_speaker = max(sims, key=sims.get)

@@ -8,9 +8,10 @@ series of measured engineering decisions.
 It reflects the live code in [`src/pipeline.py`](../src/pipeline.py),
 [`src/diarization.py`](../src/diarization.py),
 [`src/deepfilter_processor.py`](../src/deepfilter_processor.py),
-[`src/metricgan_processor.py`](../src/metricgan_processor.py) and
-[`src/target_voice_isolation.py`](../src/target_voice_isolation.py), driven by
-[`config.yaml`](../config.yaml).
+[`src/metricgan_processor.py`](../src/metricgan_processor.py),
+[`src/target_voice_isolation.py`](../src/target_voice_isolation.py) and
+[`src/speaker_confidence_gate.py`](../src/speaker_confidence_gate.py), driven
+by [`config.yaml`](../config.yaml).
 
 ---
 
@@ -51,6 +52,8 @@ goes *black* on a spectrogram while the voice and consonants remain.
    ▼
 [4] Build speech segments                       _merge_segments()
    │     drop sub‑threshold • tail‑pad • merge nearby
+   ├──▶ SPEAKER CONFIDENCE GATE — analyze (optional, off)  speaker_confidence_gate.py
+   │     computed HERE (least‑processed audio), applied at step [9] — see Problem 5
    ▼
 [5] Zero‑background mask + 120 Hz high‑pass      STEP 3 in pipeline.py
    │     speech copied onto pure silence; rumble < 120 Hz removed
@@ -66,6 +69,9 @@ goes *black* on a spectrogram while the voice and consonants remain.
    ▼
 [9] Gain‑ride → clarity EQ → loudness norm       adaptive_gain_ride / eq_clarity_boost
    │     even levels, −20 dBFS target, brick‑wall limited
+   ├──▶ SPEAKER CONFIDENCE GATE — apply (optional, off)  speaker_confidence_gate.py
+   │     multiplies in the gain curve from step [4] — late enough that
+   │     nothing above can fight or undo the suppression — see Problem 5
    ▼
 [9.5] (optional) Voice Beautify                  voice_beautify.py
    │     tone EQ + loudness leveler + high‑band "air"; SNR‑guarded; OFF by default
@@ -299,12 +305,95 @@ separated window is gated before being trusted, not accepted blindly:
 
 Failing any gate keeps that window's original, untouched audio — this stage
 can only ever leave a window unchanged or make it better, never silently
-accept a worse result. `enabled: false` by default (new, unproven — a
-deliberate opt‑in), `require_gpu: true` (a safe no‑op on CPU-only setups).
+accept a worse result. `require_gpu: true` (a safe no‑op on CPU-only setups).
 
-*Eval results pending live verification on a real overlapping‑speech upload
-through the actual GPU worker — to be filled in here once run, good or bad,
-the same measured‑numbers rigor as Problems 1‑3.*
+**Live eval result** (real overlapping‑speech lecture, real GPU worker, same
+file re‑run before/after this feature): measured directly within the 18
+diarization‑flagged overlap windows, average **+2.5 dB** additional
+reduction versus the pre‑feature baseline (~+2 dB, i.e. almost none),
+individual windows improving by up to **+5.8 dB**. Some windows show little
+change — the safety gates correctly declined an uncertain separation and
+left the audio unchanged there, not a failure. No regression on the
+already‑proven stationary‑noise result (~‑73.5 dB on quiet‑only frames,
+unchanged). `enabled: true` since this eval (PR #14).
+
+### Problem 5 — "The overlap is fixed, but faint background voices survive
+where diarization only sees one speaker"
+
+Fixing Problem 4 exposed the next layer: measured on the SAME lecture, a
+long solo‑lecturer stretch with **no diarized overlap** (94.8s–103s) got
+almost **zero** reduction (**‑0.3 dB**) — vs. true silence gaps getting
+crushed by **+36 to +90 dB**. Diagnosis: faint background voice‑like
+content too quiet/diffuse for pyannote to ever cluster as its own distinct
+speaker turn is invisible to *both* `target_voice_isolation.py` (only acts
+where 2 *recognized* speakers overlap) *and* DeepFilterNet/MetricGAN+
+(protect anything voice‑shaped, can't tell "the known speaker" from "some
+other voice"). Diarization itself wasn't wrong here — it correctly found
+two real, coherent speakers (confirmed via their actual transcribed
+words) — this is a genuinely different gap: unrecognized content that
+never gets a speaker turn at all.
+
+**Fix:** [`speaker_confidence_gate.py`](../src/speaker_confidence_gate.py) —
+a NEW stage that runs *continuously across the whole file*, not just at
+flagged overlap windows. It slides a window across every speech‑labeled
+stretch, embeds it (batched — see below), and compares it against the
+same legitimate‑speaker centroids `target_voice_isolation` uses. Where a
+stretch doesn't confidently match *any* known speaker, it's attenuated —
+architecturally the opposite of `target_voice_isolation` (a continuous
+gain curve vs. sparse discrete window‑splicing), so it's a separate class
+and a separate config block, independently enabled.
+
+**Two‑phase split — analyze early, apply late.** The similarity curve is
+computed on the *least‑processed* audio (right after `speech_segments` is
+finalized, before HPF/DFN/MetricGAN+/EQ‑boost ever touch the signal) — the
+same acoustic "flavor" the legitimate‑speaker centroids were themselves
+computed from, avoiding a coloration mismatch that would otherwise cause
+false positives. The resulting *gain curve* (plain numbers, not audio) is
+applied much later, after final loudness normalization/limiting and
+before Voice Beautify — late enough that nothing downstream
+(`adaptive_gain_ride`'s upward boosting, in particular) can fight or
+undo the suppression.
+
+**Performance — measured, not assumed.** A published WeSpeaker RTF figure
+(~0.1×) doesn't transfer directly: this project's actual embedding model
+(`pyannote/wespeaker-voxceleb-resnet34-LM`) turned out to route through
+pyannote's standard PyTorch `Model` path, not the ONNX WeSpeaker wrapper a
+different default model name would use. Measured directly
+([`scripts/benchmark_speaker_confidence_gate.py`](../scripts/benchmark_speaker_confidence_gate.py),
+a real 300s lecture, this project's own CPU): **0.30× RTF** (~90s added
+for a 5‑minute file) — batching windows into groups of 32 before each
+embedding call (mirroring `diarization.py`'s own `embedding_batch_size`)
+is the load‑bearing fix that makes this practical at all; per‑window calls
+would be far slower. Sub‑realtime, so `require_gpu: false` — a real but
+bounded CPU cost, nothing like `target_voice_isolation`'s ~7× (Problem 3).
+
+**Safety — two independent layers, because this touches every speech frame
+in the file, not rare flagged windows (a much larger blast radius than
+Problem 4's fix):**
+
+1. **Bounded attenuation, never full silence** (`max_attenuation_db`,
+   default ‑15 dB) — a false positive on the real speaker's own
+   atypical‑sounding moment (mic distance, emotion, pitch) becomes "a bit
+   quieter," not an obvious dropout.
+2. **Sustained‑evidence requirement** (`min_low_confidence_duration_s`,
+   default 0.6s) — attenuation only engages after a *run* of
+   low‑confidence hops, not a single one. This specifically protects
+   genuine overlap between two *legitimate* speakers: `target_voice_isolation`
+   deliberately sums both voices back together when they both match, but
+   a two‑voice mixture's embedding still sits away from either individual
+   centroid — a real false‑positive risk on wanted cross‑talk that a
+   duration requirement filters out (transient dips — a cough, a beat of
+   cross‑talk — never accumulate enough evidence; the diagnosed bug is an
+   8‑second sustained stretch).
+
+`enabled: false` by default (new, unproven — a deliberate opt‑in, same
+discipline as `target_voice_isolation`'s launch). Verification plan before
+flipping it on: RMS on the diagnosed stretch (targeting roughly ‑8 to
+‑12 dB more reduction, not true‑silence‑grade — bounded attenuation is
+deliberate), a false‑positive‑rate check (attenuated time falling *inside*
+a legitimate speaker's own solo turns should be near zero), and an ASR
+diff (gate on vs. off, whole file) to catch the most dangerous failure
+mode — suppressing a real speaker's own words.
 
 ---
 
@@ -347,6 +436,15 @@ target_voice_isolation:
   enabled: false
   require_gpu: true
   match_confidence_threshold: 0.65
+
+# See "Problem 5" above. Off by default - opt in once the eval on your own
+# audio confirms it helps.
+speaker_confidence_gate:
+  enabled: false
+  require_gpu: false                  # measured ~0.3x realtime on CPU - see scripts/benchmark_speaker_confidence_gate.py
+  match_confidence_threshold: 0.6
+  min_low_confidence_duration_s: 0.6  # required sustained evidence before attenuation engages
+  max_attenuation_db: -15             # bounded, never full silence
 ```
 
 **Tuning cheatsheet**
