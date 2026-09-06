@@ -104,7 +104,7 @@ target_voice_isolation:
 # blended embedding doesn't cleanly match either centroid) never triggers
 # it alone.
 speaker_confidence_gate:
-  enabled: false                       # OFF by default - new/unproven, deliberate opt-in after eval
+  enabled: true                        # ON for live local-CPU evaluation - revisit after real results
   require_gpu: false                   # measured ~0.3x realtime on this project's own CPU
                                         # (scripts/benchmark_speaker_confidence_gate.py) - real
                                         # cost but sub-realtime, unlike target_voice_isolation's
