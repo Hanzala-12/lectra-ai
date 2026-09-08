@@ -308,3 +308,79 @@ def test_raises_after_all_keys_exhausted_on_empty_choices(client, monkeypatch):
     with patch("httpx.Client", return_value=mock_httpx_client):
         with pytest.raises(ValueError, match="no usable content"):
             client.chat([{"role": "user", "content": "hi"}])
+
+
+# ----------------------------------------------------------------- content_ok / complete_json
+# Real bug this guards against: json_mode can get HTTP 200 with real, non-
+# empty content that still doesn't parse as JSON (a free-tier model
+# occasionally malforming its own JSON-mode output under load - seen live
+# this session). Before content_ok existed, complete_json() called chat()
+# ONCE, got that unparseable text back, and failed outright with no way to
+# retry or rotate to a different key/model - the empty-choices handling
+# above didn't catch this since the content itself was non-empty.
+
+
+def test_chat_rejects_content_that_fails_the_validator(client, monkeypatch):
+    bad_json = _fake_response(200, "not valid json {{{")
+    ok = _fake_response(200, '{"answer": 42}')
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.side_effect = [bad_json, ok]
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        answer = client.chat(
+            [{"role": "user", "content": "hi"}],
+            content_ok=lambda text: text.strip().startswith("{"),
+        )
+    assert answer == '{"answer": 42}'
+    assert mock_httpx_client.__enter__.return_value.post.call_count == 2
+
+
+def test_complete_json_retries_then_succeeds_on_malformed_json(client, monkeypatch):
+    malformed = _fake_response(200, "{ { not actually valid json")
+    ok = _fake_response(200, '{"questions": [1, 2, 3]}')
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.side_effect = [malformed, ok]
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        result = client.complete_json("generate a quiz")
+    assert result == {"questions": [1, 2, 3]}
+    assert mock_httpx_client.__enter__.return_value.post.call_count == 2
+
+
+def test_complete_json_rotates_to_next_keys_model_on_malformed_json(
+    two_key_client, monkeypatch
+):
+    # two_key_client has max_retries=1 -> 2 attempts per key before rotating.
+    always_malformed = _fake_response(200, "{ { still not valid")
+    ok = _fake_response(200, '{"questions": []}')
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.side_effect = [
+        always_malformed,
+        always_malformed,
+        ok,
+    ]
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        result = two_key_client.complete_json("generate a quiz")
+    assert result == {"questions": []}
+    assert mock_httpx_client.__enter__.return_value.post.call_count == 3
+
+
+def test_complete_json_raises_clear_error_when_every_key_fails(client, monkeypatch):
+    always_malformed = _fake_response(200, "definitely not json")
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.return_value = always_malformed
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        with pytest.raises(ValueError, match="content failed validation"):
+            client.complete_json("generate a quiz")
+
+
+def test_complete_json_still_works_with_valid_json_first_try(client, monkeypatch):
+    ok = _fake_response(200, '{"questions": [{"question": "hi"}]}')
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.return_value = ok
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        result = client.complete_json("generate a quiz")
+    assert result == {"questions": [{"question": "hi"}]}
+    assert mock_httpx_client.__enter__.return_value.post.call_count == 1
