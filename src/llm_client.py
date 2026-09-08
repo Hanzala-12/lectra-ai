@@ -17,7 +17,7 @@ request just because one specific key/account is temporarily unusable.
 import os
 import json
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +136,21 @@ class LLMClient:
         temperature: float = 0.3,
         max_tokens: int = 1500,
         json_mode: bool = False,
+        content_ok: Optional[Callable[[str], bool]] = None,
     ) -> str:
         """Send a chat-completion request and return the assistant text.
-        Rotates across every configured API key before giving up."""
+        Rotates across every configured API key before giving up.
+
+        content_ok: optional validator run on the response text before
+        accepting it - if it returns False, that response is treated
+        exactly like a retryable server error (retry this key, then rotate
+        to the next key/model) instead of being returned. Used by
+        complete_json() to catch "HTTP succeeded, json_mode was set, but
+        the model still produced text that doesn't actually parse as
+        JSON" - a real failure mode seen live from a free-tier model under
+        load, distinct from (and not caught by) the empty-choices case
+        below since the content itself is non-empty.
+        """
         if not self.is_configured():
             raise LLMNotConfigured(
                 "LLM is not configured. Add OPENROUTER_API_KEY to your .env file."
@@ -249,25 +261,36 @@ class LLMClient:
                     if choices
                     else None
                 )
-                if content is not None:
+                if content is not None and (content_ok is None or content_ok(content)):
                     return content.strip()
 
-                # A 200 status but no usable content - seen live: a
-                # provider occasionally returns {"choices": []} (or a
-                # choice with no "content") instead of a real completion,
-                # despite a successful HTTP status. Treat it exactly like
-                # a retryable server error rather than crashing with an
-                # unhandled IndexError/KeyError - retry this key with
-                # backoff, then rotate to the next key/model.
+                # A 200 status, but either no usable content at all (seen
+                # live: a provider occasionally returns {"choices": []} or
+                # a choice with no "content") OR content that came back but
+                # a caller-supplied validator rejected it (complete_json()
+                # uses this for "the model's JSON mode still produced text
+                # that doesn't actually parse as JSON" - also seen live,
+                # separately, from the SAME free-tier model under load).
+                # Either way, treat it exactly like a retryable server
+                # error rather than crashing/silently returning garbage -
+                # retry this key with backoff, then rotate to the next
+                # key/model (which - thanks to per-key models - may not
+                # share whatever made this one misbehave).
+                reason = (
+                    "no usable content"
+                    if content is None
+                    else "content failed validation"
+                )
+                detail = data if content is None else content
                 last_error = ValueError(
-                    f"LLM returned no usable content (key {key_index + 1}/"
+                    f"LLM returned {reason} (key {key_index + 1}/"
                     f"{len(self.api_keys)}, model {key_payload['model']}): "
-                    f"{str(data)[:300]}"
+                    f"{str(detail)[:300]}"
                 )
                 if not is_last_attempt:
                     wait = min(2**attempt, 10)
                     logger.warning(
-                        f"LLM response had no usable content; retrying in "
+                        f"LLM {reason}; retrying in "
                         f"{wait}s (key {key_index + 1}/{len(self.api_keys)}, "
                         f"attempt {attempt + 1}/{self.max_retries})"
                     )
@@ -395,11 +418,33 @@ class LLMClient:
         return self.chat(messages, **kwargs)
 
     def complete_json(self, prompt: str, system: Optional[str] = None, **kwargs) -> Any:
-        """Ask for JSON and parse it robustly (handles code-fences / stray text)."""
+        """Ask for JSON and parse it robustly (handles code-fences / stray
+        text). Parsing happens INSIDE chat()'s retry/rotate loop (via the
+        content_ok hook) rather than after chat() has already returned -
+        so a model that returns HTTP 200 with text that doesn't actually
+        parse as JSON (seen live from a free-tier model under load) gets
+        retried and rotated to a different key/model, same as any other
+        bad response, instead of failing outright with no chance to fall
+        back to a key whose model didn't have the same hiccup.
+        """
         kwargs.setdefault("json_mode", True)
         kwargs.setdefault("temperature", 0.2)
-        raw = self.complete(prompt, system=system, **kwargs)
-        return _extract_json(raw)
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        parsed_holder: Dict[str, Any] = {}
+
+        def _validator(text: str) -> bool:
+            try:
+                parsed_holder["value"] = _extract_json(text)
+                return True
+            except ValueError:
+                return False
+
+        self.chat(messages, content_ok=_validator, **kwargs)
+        return parsed_holder["value"]
 
 
 def _extract_json(text: str) -> Any:
