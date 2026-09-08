@@ -189,3 +189,122 @@ def test_does_not_rotate_keys_on_non_retryable_4xx(two_key_client, monkeypatch):
         with pytest.raises(httpx.HTTPStatusError):
             two_key_client.chat([{"role": "user", "content": "hi"}])
     assert mock_httpx_client.__enter__.return_value.post.call_count == 1
+
+
+# ----------------------------------------------------------------- per-key models
+# Real bug this guards against: OPENROUTER_MODEL used to be one value shared
+# by every key, so a model-level failure (discontinued/404, or the empty-
+# choices case below) took out every fallback key at once - rotating keys
+# was useless since they all hit the same broken model. Confirmed live this
+# session: minimax/minimax-m3:free got discontinued by OpenRouter (404 on
+# every key), then separately a different model occasionally returned HTTP
+# 200 with no usable content.
+
+
+def test_different_keys_use_their_own_model(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key-1")
+    monkeypatch.setenv("OPENROUTER_API_KEY_2", "fake-key-2")
+    monkeypatch.delenv(
+        "OPENROUTER_API_KEY_3", raising=False
+    )  # don't leak the real .env's 3rd key
+    monkeypatch.setenv("OPENROUTER_MODEL", "model-one")
+    monkeypatch.setenv("OPENROUTER_MODEL_2", "model-two")
+    client = LLMClient(max_retries=1)
+    assert client.key_models == ["model-one", "model-two"]
+
+    # Rotate off key 1 (402 = out of credits) and confirm each request was
+    # actually sent with ITS OWN key's model, not one shared value.
+    ok = _fake_response(200, "worked on second key")
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.side_effect = [
+        _fake_response(402),  # rotate off key 1 without touching its model
+        ok,
+    ]
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        answer = client.chat([{"role": "user", "content": "hi"}])
+    assert answer == "worked on second key"
+    calls = mock_httpx_client.__enter__.return_value.post.call_args_list
+    assert calls[0].kwargs["json"]["model"] == "model-one"
+    assert calls[1].kwargs["json"]["model"] == "model-two"
+
+
+def test_per_key_model_falls_back_to_shared_default(monkeypatch):
+    # Only OPENROUTER_MODEL set (no per-key overrides) - every key must use
+    # it, exactly like before this feature existed.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key-1")
+    monkeypatch.setenv("OPENROUTER_API_KEY_2", "fake-key-2")
+    monkeypatch.setenv("OPENROUTER_API_KEY_3", "fake-key-3")
+    monkeypatch.setenv("OPENROUTER_MODEL", "shared-model")
+    monkeypatch.delenv("OPENROUTER_MODEL_2", raising=False)
+    monkeypatch.delenv("OPENROUTER_MODEL_3", raising=False)
+    client = LLMClient(max_retries=1)
+    assert client.key_models == ["shared-model", "shared-model", "shared-model"]
+
+
+def test_explicit_model_arg_overrides_every_key(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_MODEL_2", "should-be-ignored")
+    client = LLMClient(api_key="fake-key", model="explicit-model")
+    assert client.key_models == ["explicit-model"]
+
+
+# ----------------------------------------------------------------- malformed response
+# Real bug this guards against: a 200 status with an empty/missing choices
+# list used to crash with an unhandled IndexError/KeyError instead of being
+# treated as a retryable failure - confirmed live this session.
+
+
+def test_empty_choices_retries_then_succeeds(client, monkeypatch):
+    empty_choices = _fake_response(200)
+    empty_choices.json.return_value = {"choices": []}
+    ok = _fake_response(200, "real answer")
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.side_effect = [empty_choices, ok]
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        answer = client.chat([{"role": "user", "content": "hi"}])
+    assert answer == "real answer"
+    assert mock_httpx_client.__enter__.return_value.post.call_count == 2
+
+
+def test_missing_message_content_is_handled_not_crashed(client, monkeypatch):
+    no_content = _fake_response(200)
+    no_content.json.return_value = {"choices": [{"message": {}}]}
+    ok = _fake_response(200, "real answer")
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.side_effect = [no_content, ok]
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        answer = client.chat([{"role": "user", "content": "hi"}])
+    assert answer == "real answer"
+
+
+def test_empty_choices_rotates_to_next_key_after_exhausting_retries(
+    two_key_client, monkeypatch
+):
+    always_empty = _fake_response(200)
+    always_empty.json.return_value = {"choices": []}
+    ok = _fake_response(200, "worked on second key")
+    mock_httpx_client = MagicMock()
+    # two_key_client has max_retries=1 -> 2 attempts per key before rotating
+    mock_httpx_client.__enter__.return_value.post.side_effect = [
+        always_empty,
+        always_empty,
+        ok,
+    ]
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        answer = two_key_client.chat([{"role": "user", "content": "hi"}])
+    assert answer == "worked on second key"
+    assert mock_httpx_client.__enter__.return_value.post.call_count == 3
+
+
+def test_raises_after_all_keys_exhausted_on_empty_choices(client, monkeypatch):
+    always_empty = _fake_response(200)
+    always_empty.json.return_value = {"choices": []}
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.return_value = always_empty
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        with pytest.raises(ValueError, match="no usable content"):
+            client.chat([{"role": "user", "content": "hi"}])
