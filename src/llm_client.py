@@ -67,6 +67,35 @@ def _collect_api_keys(explicit: Optional[str]) -> List[str]:
     return unique
 
 
+def _collect_key_models(
+    explicit_model: Optional[str], num_keys: int, default_model: str
+) -> List[str]:
+    """One model per configured key, same index convention as
+    OPENROUTER_API_KEY/_2/_3: OPENROUTER_MODEL is key 1's model,
+    OPENROUTER_MODEL_2..OPENROUTER_MODEL_9 override keys 2..9. A key without
+    its own override falls back to `default_model` - so a setup that only
+    ever set OPENROUTER_MODEL keeps today's exact behavior (every key uses
+    the same model). Different models per key means a model-level failure
+    (discontinued/404, or a malformed-response hiccup - see chat()) doesn't
+    take out every fallback key at once, only whichever key was paired with
+    that specific model - the real gap that caused two real outages this
+    session (minimax-m3:free being discontinued, then a different model
+    occasionally 200'ing with no usable content).
+
+    An explicit `explicit_model` (the model= constructor arg, as tests
+    pass) is authoritative for every key, no per-key env lookup - mirrors
+    how an explicit api_key= overrides all env-based key collection.
+    """
+    if num_keys == 0:
+        return []
+    if explicit_model:
+        return [explicit_model] * num_keys
+    models = [default_model]
+    for i in range(2, num_keys + 1):
+        models.append(os.getenv(f"OPENROUTER_MODEL_{i}") or default_model)
+    return models
+
+
 class LLMClient:
     def __init__(
         self,
@@ -88,6 +117,9 @@ class LLMClient:
         ).rstrip("/")
         # A small, capable, inexpensive default; override via env if desired.
         self.model = model or os.getenv("OPENROUTER_MODEL") or "openai/gpt-4o-mini"
+        # Per-key model overrides - see _collect_key_models(). key_models[i]
+        # is always the model used with api_keys[i]; same length as api_keys.
+        self.key_models = _collect_key_models(model, len(self.api_keys), self.model)
         self.timeout = timeout
         # Free-tier models in particular are prone to transient 429s (shared
         # rate-limit pools) - retry those (and 5xx/network errors) with
@@ -128,6 +160,13 @@ class LLMClient:
 
         for key_index, api_key in enumerate(self.api_keys):
             is_last_key = key_index == len(self.api_keys) - 1
+            # Each key uses ITS OWN configured model (see _collect_key_models)
+            # - a model-level failure (discontinued, or the malformed-
+            # response case below) doesn't take out every key, only this one.
+            # A fresh dict per key (not a mutated shared one) so nothing
+            # holding a reference to an earlier call's payload - a test's
+            # call_args_list, in particular - sees a later key's mutation.
+            key_payload = {**payload, "model": self.key_models[key_index]}
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -143,7 +182,7 @@ class LLMClient:
                         resp = client.post(
                             f"{self.base_url}/chat/completions",
                             headers=headers,
-                            json=payload,
+                            json=key_payload,
                         )
                 except (httpx.TimeoutException, httpx.TransportError) as e:
                     last_error = e
@@ -204,7 +243,37 @@ class LLMClient:
                     )
                     raise
                 data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
+                choices = data.get("choices") if isinstance(data, dict) else None
+                content = (
+                    (choices[0].get("message") or {}).get("content")
+                    if choices
+                    else None
+                )
+                if content is not None:
+                    return content.strip()
+
+                # A 200 status but no usable content - seen live: a
+                # provider occasionally returns {"choices": []} (or a
+                # choice with no "content") instead of a real completion,
+                # despite a successful HTTP status. Treat it exactly like
+                # a retryable server error rather than crashing with an
+                # unhandled IndexError/KeyError - retry this key with
+                # backoff, then rotate to the next key/model.
+                last_error = ValueError(
+                    f"LLM returned no usable content (key {key_index + 1}/"
+                    f"{len(self.api_keys)}, model {key_payload['model']}): "
+                    f"{str(data)[:300]}"
+                )
+                if not is_last_attempt:
+                    wait = min(2**attempt, 10)
+                    logger.warning(
+                        f"LLM response had no usable content; retrying in "
+                        f"{wait}s (key {key_index + 1}/{len(self.api_keys)}, "
+                        f"attempt {attempt + 1}/{self.max_retries})"
+                    )
+                    _time.sleep(wait)
+                    continue
+                break  # exhausted retries on this key -> try next key
 
             # Reaching here means this key's attempts are exhausted (network
             # error, 401/402, or a persistent retryable status) - loop
@@ -256,6 +325,8 @@ class LLMClient:
 
         for key_index, api_key in enumerate(self.api_keys):
             is_last_key = key_index == len(self.api_keys) - 1
+            # Fresh dict per key - see the matching comment in chat().
+            key_payload = {**payload, "model": self.key_models[key_index]}
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -269,7 +340,7 @@ class LLMClient:
                         "POST",
                         f"{self.base_url}/chat/completions",
                         headers=headers,
-                        json=payload,
+                        json=key_payload,
                     ) as resp:
                         if resp.status_code in KEY_ROTATE_STATUS_CODES or (
                             resp.status_code in RETRYABLE_STATUS_CODES
