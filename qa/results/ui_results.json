@@ -1,0 +1,309 @@
+{
+  "user": "ui_528dc341",
+  "results": [
+    {
+      "id": "UI-01",
+      "title": "Logged-out visit to / redirects to /login",
+      "expected": "/login",
+      "actual": "/login",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-02",
+      "title": "Logged-out visit to /app/dashboard redirects to /login",
+      "expected": "/login",
+      "actual": "/login",
+      "status": "PASS",
+      "screenshot": "UI-02.png"
+    },
+    {
+      "id": "UI-03",
+      "title": "Logged-out visit to /features redirects to /login",
+      "expected": "/login",
+      "actual": "/login",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-04",
+      "title": "Logged-out visit to /app/library redirects to /login",
+      "expected": "/login",
+      "actual": "/login",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-05",
+      "title": "Logged-out visit to /docs redirects to /login",
+      "expected": "/login",
+      "actual": "/login",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-06",
+      "title": "Logged-out visit to /does-not-exist redirects to /login",
+      "expected": "/login",
+      "actual": "/login",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-07",
+      "title": "Login page renders username, password and sign-up link",
+      "expected": "all present",
+      "actual": "True",
+      "status": "PASS",
+      "screenshot": "UI-07_login.png"
+    },
+    {
+      "id": "UI-08",
+      "title": "Empty login submit shows a validation message",
+      "expected": "'Enter your username and password.'",
+      "actual": "Enter your username and password.",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-09",
+      "title": "Wrong credentials show 'Invalid username or password' and stay on /login",
+      "expected": "error shown, no redirect",
+      "actual": "yes",
+      "status": "PASS",
+      "screenshot": "UI-09_wrong_login.png"
+    },
+    {
+      "id": "UI-10",
+      "title": "Login show/hide password toggle switches input type",
+      "expected": "password -> text",
+      "actual": "password -> text",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-11",
+      "title": "Signup page has Confirm Password field",
+      "expected": "2 password fields",
+      "actual": "2",
+      "status": "PASS",
+      "screenshot": "UI-11_signup_empty.png"
+    },
+    {
+      "id": "UI-12",
+      "title": "Numeric username '23454' rejected",
+      "expected": "'must start with a letter'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": "UI-12_signup_errors.png"
+    },
+    {
+      "id": "UI-13",
+      "title": "Weak password rejected with specific reason",
+      "expected": "'needs at least one uppercase letter'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-14",
+      "title": "Mismatched confirm password rejected",
+      "expected": "'Passwords do not match.'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-15",
+      "title": "Still on /signup (no account created, no redirect)",
+      "expected": "/signup",
+      "actual": "/signup",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-16",
+      "title": "Malformed email rejected",
+      "expected": "'valid email address'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-17",
+      "title": "Invalid full name (digits) rejected",
+      "expected": "'Name can only contain letters'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-18",
+      "title": "Password containing the username rejected",
+      "expected": "'cannot contain your username'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-19",
+      "title": "Common password ('Password1!') rejected",
+      "expected": "'too common'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-20",
+      "title": "Strength meter updates live (Weak -> Very strong) and shows 'Passwords match'",
+      "expected": "Weak ... Very strong + Passwords match",
+      "actual": "True / True / True",
+      "status": "PASS",
+      "screenshot": "UI-20_strength_strong.png"
+    },
+    {
+      "id": "UI-21",
+      "title": "Signup show/hide password toggle",
+      "expected": "password -> text",
+      "actual": "password -> text",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-22",
+      "title": "Valid signup creates the account, stores a session and opens the dashboard",
+      "expected": "/app/dashboard + token",
+      "actual": "/app/dashboard token=yes",
+      "status": "PASS",
+      "screenshot": "UI-22_dashboard.png"
+    },
+    {
+      "id": "UI-23",
+      "title": "Logged-in user visiting /login is sent to the dashboard",
+      "expected": "/app/dashboard",
+      "actual": "/app/dashboard",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-24",
+      "title": "Logged-in user visiting /signup is sent to the dashboard",
+      "expected": "/app/dashboard",
+      "actual": "/app/dashboard",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-25",
+      "title": "Logged-in user can open the home page",
+      "expected": "/",
+      "actual": "/",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-26",
+      "title": "Logged-in: Library page loads without crashing",
+      "expected": "stays on page, content rendered, no JS exception",
+      "actual": "/app/library, 219 chars, 0 JS errors",
+      "status": "PASS",
+      "screenshot": "UI-26_library.png"
+    },
+    {
+      "id": "UI-27",
+      "title": "Logged-in: Analytics page loads without crashing",
+      "expected": "stays on page, content rendered, no JS exception",
+      "actual": "/app/analytics, 273 chars, 0 JS errors",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-28",
+      "title": "Logged-in: Chat page loads without crashing",
+      "expected": "stays on page, content rendered, no JS exception",
+      "actual": "/app/chat, 221 chars, 0 JS errors",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-29",
+      "title": "Logged-in: Upload page loads without crashing",
+      "expected": "stays on page, content rendered, no JS exception",
+      "actual": "/app/upload, 355 chars, 0 JS errors",
+      "status": "PASS",
+      "screenshot": "UI-29_upload.png"
+    },
+    {
+      "id": "UI-30",
+      "title": "Logout from the profile menu returns to /login and clears the session",
+      "expected": "/login, no token",
+      "actual": "/login, token=no",
+      "status": "PASS",
+      "screenshot": "UI-30_after_logout.png"
+    },
+    {
+      "id": "UI-31",
+      "title": "After logout the dashboard is no longer reachable (back button / URL)",
+      "expected": "/login",
+      "actual": "/login",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-32",
+      "title": "Duplicate username (different case) shows 'already taken'",
+      "expected": "'already taken'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": "UI-32_duplicate.png"
+    },
+    {
+      "id": "UI-33",
+      "title": "Login with correct credentials opens the dashboard",
+      "expected": "/app/dashboard",
+      "actual": "/app/dashboard",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-34",
+      "title": "Tampered/expired token is rejected: redirected to /login and token cleared",
+      "expected": "/login, no token",
+      "actual": "/login, token=no",
+      "status": "PASS",
+      "screenshot": null
+    },
+    {
+      "id": "UI-35",
+      "title": "Repeated wrong passwords show the 'Too many failed attempts' lock-out message",
+      "expected": "'Too many failed attempts'",
+      "actual": "shown",
+      "status": "PASS",
+      "screenshot": "UI-35_lockout.png"
+    },
+    {
+      "id": "UI-36",
+      "title": "/login at 375px mobile width has no horizontal scroll",
+      "expected": "scrollWidth <= clientWidth",
+      "actual": "375 vs 375",
+      "status": "PASS",
+      "screenshot": "UI-36_mobile_login.png"
+    },
+    {
+      "id": "UI-37",
+      "title": "/signup at 375px mobile width has no horizontal scroll",
+      "expected": "scrollWidth <= clientWidth",
+      "actual": "375 vs 375",
+      "status": "PASS",
+      "screenshot": "UI-37_mobile_signup.png"
+    },
+    {
+      "id": "UI-38",
+      "title": "No JavaScript errors in the console on /login and /signup",
+      "expected": "0 errors",
+      "actual": "0 errors",
+      "status": "PASS",
+      "screenshot": null
+    }
+  ]
+}

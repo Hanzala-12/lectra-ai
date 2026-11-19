@@ -1,0 +1,82 @@
+{
+  "user": "llm_0e9aceb3",
+  "results": [
+    {
+      "id": "LLM-01",
+      "title": "Notes are generated from the transcript and mention its key concepts",
+      "expected": "200; mentions chlorophyll/glucose",
+      "actual": "200 in 7s; 2847 chars; chlorophyll=True glucose=True",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-02",
+      "title": "Second notes request is served from cache (fast)",
+      "expected": "200, much faster",
+      "actual": "200 in 0.0s",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-03",
+      "title": "MCQ quiz generated: every question has >=2 options and exactly one correct answer",
+      "expected": "200; >=1 question, well-formed",
+      "actual": "200 in 3s; 3 questions; wellformed=True",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-04",
+      "title": "Grading: all-correct answers score 100%",
+      "expected": "200; full marks",
+      "actual": "200 {'score': 100.0, 'correct': 3, 'total': 3, 'breakdown': [{'question': 'What is the overall chemical equation for photosynthesis as described in the transcript?', 'your_answer_id': 'a0_9b018e', 'correc",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-04b",
+      "title": "Grading: all-wrong answers score 0%",
+      "expected": "200; zero marks",
+      "actual": "200 {'score': 0.0, 'correct': 0, 'total': 3, 'breakdown': [{'question': 'What is the overall chemical equation for photosynthesis as described in the transcript?', 'your_answer_id': 'a1_a3f70a', 'correct_",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-04c",
+      "title": "Grading with invalid answer ids never crashes (no 500)",
+      "expected": "<500",
+      "actual": "200",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-05",
+      "title": "Study schedule generated",
+      "expected": "200",
+      "actual": "200 in 21s",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-06",
+      "title": "Lecture evaluation generated",
+      "expected": "200",
+      "actual": "200 in 4s",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-07",
+      "title": "RAG chatbot answers correctly from the transcript (oxygen comes from water)",
+      "expected": "200; answer mentions water; sources cited",
+      "actual": "200 in 1s; water=True; sources=1",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-08",
+      "title": "Out-of-scope question: chatbot does not hallucinate an answer from outside the lecture",
+      "expected": "declines / says not covered (no 'paris'/'france won')",
+      "actual": "200; answer: \"i couldn't find that information in this lecture.\"",
+      "status": "PASS"
+    },
+    {
+      "id": "LLM-09",
+      "title": "Audio recap generation responds (script + offline TTS)",
+      "expected": "200 or clear 503 if the Piper voice model is not installed",
+      "actual": "200 in 10s {'script': 'Today we talked about photosynthesis, the way plants turn light into food. It happens inside chloroplasts, those green organelle",
+      "status": "PASS"
+    }
+  ]
+}

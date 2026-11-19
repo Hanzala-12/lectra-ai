@@ -1,0 +1,262 @@
+{
+  "users": [
+    "qa_c23cf28b",
+    "qb_7780154a",
+    "qc_35f0aa27"
+  ],
+  "lecture": "55940b1276a7",
+  "results": [
+    {
+      "id": "ST-01",
+      "title": "Signup rejects numeric-only username",
+      "expected": "400",
+      "actual": "400: Username must start with a letter (not a number).",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-02",
+      "title": "Signup rejects weak password",
+      "expected": "400",
+      "actual": "400: Password needs at least one uppercase letter.",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-03",
+      "title": "Signup rejects mismatched confirm password",
+      "expected": "400",
+      "actual": "400: Passwords do not match.",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-04",
+      "title": "Signup rejects malformed email",
+      "expected": "400",
+      "actual": "400: Enter a valid email address (e.g. name@example.com).",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-05",
+      "title": "Signup rejects invalid full name",
+      "expected": "400",
+      "actual": "400: Name can only contain letters, spaces, hyphens and apostrophes.",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-06",
+      "title": "Signup with missing password field rejected",
+      "expected": "422",
+      "actual": "422",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-07",
+      "title": "Signup with malformed JSON rejected (no 500)",
+      "expected": "422",
+      "actual": "422",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-08",
+      "title": "Valid signup succeeds, returns token, never leaks password/hash",
+      "expected": "200 + token",
+      "actual": "200 in 383 ms",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-09",
+      "title": "Duplicate username (case-insensitive) rejected",
+      "expected": "409",
+      "actual": "409",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-10",
+      "title": "/me returns the logged-in student",
+      "expected": "200 + username",
+      "actual": "200 qa_c23cf28b",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-11",
+      "title": "Login succeeds (username case-insensitive)",
+      "expected": "200",
+      "actual": "200 in 333 ms",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-12",
+      "title": "Login with wrong password rejected with generic message",
+      "expected": "401 'Invalid username or password'",
+      "actual": "401: Invalid username or password",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-13",
+      "title": "Unknown username gives the SAME message as wrong password (no user enumeration)",
+      "expected": "401, identical detail",
+      "actual": "401: Invalid username or password",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-14",
+      "title": "GET /api/auth/me without token blocked",
+      "expected": "401 (or 422 before auth)",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-15",
+      "title": "GET /api/library without token blocked",
+      "expected": "401 (or 422 before auth)",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-16",
+      "title": "POST /api/process-lecture without token blocked",
+      "expected": "401 (or 422 before auth)",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-17",
+      "title": "POST /api/process without token blocked",
+      "expected": "401 (or 422 before auth)",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-18",
+      "title": "GET /api/lecture/abc123 without token blocked",
+      "expected": "401 (or 422 before auth)",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-19",
+      "title": "POST /api/lecture/abc123/notes without token blocked",
+      "expected": "401 (or 422 before auth)",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-20",
+      "title": "POST /api/lecture/abc123/chat without token blocked",
+      "expected": "401 (or 422 before auth)",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-21",
+      "title": "DELETE /api/lecture/abc123 without token blocked",
+      "expected": "401 (or 422 before auth)",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-22",
+      "title": "Forged/garbage bearer token rejected",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-23",
+      "title": "Student A can create a lecture from a transcript",
+      "expected": "200 + id",
+      "actual": "200 id=55940b1276a7",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-24",
+      "title": "Student B cannot read Student A's lecture (404, no existence leak)",
+      "expected": "404",
+      "actual": "404",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-25",
+      "title": "Student B cannot delete Student A's lecture",
+      "expected": "404",
+      "actual": "404",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-26",
+      "title": "Student B's library does not list A's lecture",
+      "expected": "no lecture ids from A",
+      "actual": "200, A's lecture not listed",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-27",
+      "title": "Student A can read own lecture",
+      "expected": "200",
+      "actual": "200",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-28",
+      "title": "SQL-injection style username does not log in",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-29",
+      "title": "Script-tag username rejected by validation",
+      "expected": "400",
+      "actual": "400",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-30",
+      "title": "Path traversal on /api/download blocked (forward-slash form)",
+      "expected": "404/400, no file content",
+      "actual": "404",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-30b",
+      "title": "Path traversal on /api/download blocked (Windows backslash form)",
+      "expected": "404/400, no file content",
+      "actual": "404",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-31",
+      "title": "Oversized username rejected (no crash)",
+      "expected": "400",
+      "actual": "400",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-32",
+      "title": "Health endpoint reports healthy",
+      "expected": "200",
+      "actual": "200 in 117 ms",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-33",
+      "title": "LLM status endpoint reports configuration",
+      "expected": "200 configured",
+      "actual": "200 {'configured': True, 'model': 'nvidia/nemotron-3-super-120b-a12b:free'}",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-34",
+      "title": "Account locks after 5 failed logins (correct password then refused)",
+      "expected": "5x401 then 429",
+      "actual": "[401, 401, 401, 401, 401] then 429",
+      "status": "PASS"
+    },
+    {
+      "id": "ST-35",
+      "title": "Logout invalidates the session token",
+      "expected": "200 then 401",
+      "actual": "200 then 401",
+      "status": "PASS"
+    }
+  ]
+}

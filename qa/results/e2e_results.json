@@ -1,0 +1,103 @@
+{
+  "user": "e2e_f0643bc5",
+  "results": [
+    {
+      "id": "E2E-01",
+      "title": "Non-audio upload is rejected cleanly",
+      "expected": "400",
+      "actual": "400",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-02",
+      "title": "30 s lecture upload runs noise removal + diarization + ASR and returns a transcript",
+      "expected": "200, transcript text, segments",
+      "actual": "200 in 35s; 489 chars, 4 segments, lecture_id=98c8ad323118",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-03",
+      "title": "Original and cleaned audio files are downloadable",
+      "expected": "200 on both",
+      "actual": "[200, 200]",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-04",
+      "title": "Speaker labels present in segments (diarization)",
+      "expected": ">=1 labelled segment",
+      "actual": "['SPEAKER_00']",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-05",
+      "title": "Noise-reduction metrics returned (duration/processing info)",
+      "expected": "numeric duration fields",
+      "actual": "orig=30.0 proc=None",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-06",
+      "title": "Processed lecture appears in the student's library",
+      "expected": "lecture listed",
+      "actual": "200",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-07",
+      "title": "Study notes generated from transcript (LLM)",
+      "expected": "200",
+      "actual": "200 in 5s keys=notes,cached",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-08",
+      "title": "MCQ quiz generated (LLM)",
+      "expected": "200",
+      "actual": "200 in 4s keys=quiz,quiz_id,cached",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-09",
+      "title": "Study schedule generated (LLM)",
+      "expected": "200",
+      "actual": "200 in 14s keys=schedule,review_state,cached",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-10",
+      "title": "Lecture evaluation generated (LLM)",
+      "expected": "200",
+      "actual": "200 in 6s keys=evaluation,cached",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-11",
+      "title": "RAG chatbot answers a question about the lecture",
+      "expected": "200",
+      "actual": "200 in 2s keys=answer,sources",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-12",
+      "title": "Spaced-repetition review schedule endpoint responds",
+      "expected": "200",
+      "actual": "200",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-13",
+      "title": "Lecture can be deleted by its owner",
+      "expected": "200",
+      "actual": "200",
+      "status": "PASS"
+    },
+    {
+      "id": "E2E-14",
+      "title": "Deleted lecture is gone (404)",
+      "expected": "404",
+      "actual": "404",
+      "status": "PASS"
+    }
+  ]
+}
