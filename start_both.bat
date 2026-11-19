@@ -15,3 +15,4 @@ echo Both servers are starting...
 echo Backend: Check the Backend Server window
 echo Frontend: Check the Frontend Server window
 pause
+ 

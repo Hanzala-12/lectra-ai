@@ -2,9 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "backend",
+      "runtimeExecutable": "D:/fyp/venv/Scripts/python.exe",
+      "runtimeArgs": ["D:/fyp/backend.py"],
+      "port": 8000
+    },
+    {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["--prefix", "D:/fyp/frontend", "run", "dev"],
       "port": 3000
     }
   ]

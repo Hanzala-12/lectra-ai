@@ -161,7 +161,17 @@ def generate_schedule(
         '"tips":["..."]}\n\n'
         f"TRANSCRIPT:\n{_prep(transcript)}"
     )
-    return llm.complete_json(prompt, system=system, max_tokens=1500)
+    result = llm.complete_json(prompt, system=system, max_tokens=1500)
+    if isinstance(result, list):
+        # Seen live: a model occasionally returns the plan array directly
+        # instead of the requested {"plan": [...], "tips": [...]} wrapper -
+        # syntactically valid JSON, so complete_json()'s parse-only
+        # validation lets it through, and make_schedule() then crashed with
+        # AttributeError: 'list' object has no attribute 'get'. Same
+        # dict-or-bare-list normalization generate_quiz() already does for
+        # its own JSON-mode call, just applied here too.
+        return {"plan": result, "tips": []}
+    return result
 
 
 # ---------------------------------------------------------- EVALUATION

@@ -145,25 +145,36 @@ class VectorizedAudioProcessor:
         hop_len = 256
 
         # NumPy version
-        start = time.time()
+        start = time.perf_counter()
         for _ in range(n_iterations):
             _ = _compute_frame_energies_numpy(audio, frame_len, hop_len)
-        numpy_time = (time.time() - start) / n_iterations * 1000  # ms
+        numpy_time = (time.perf_counter() - start) / n_iterations * 1000  # ms
 
         # Numba version (if available)
         if NUMBA_AVAILABLE:
             # Warm up JIT
             _ = _compute_frame_energies_numba(audio, frame_len, hop_len)
 
-            start = time.time()
+            start = time.perf_counter()
             for _ in range(n_iterations):
                 _ = _compute_frame_energies_numba(audio, frame_len, hop_len)
-            numba_time = (time.time() - start) / n_iterations * 1000  # ms
+            numba_time = (time.perf_counter() - start) / n_iterations * 1000  # ms
 
-            try:
+            if numpy_time > 0 and numba_time > 0:
                 speedup = numpy_time / numba_time
-            except ZeroDivisionError:
-                speedup = float("inf") if numpy_time > 0 else 1.0
+            elif numba_time == 0 and numpy_time > 0:
+                # Optimized version's time rounded to zero - genuinely too
+                # fast to measure at this resolution.
+                speedup = float("inf")
+            else:
+                # numpy_time itself rounded to zero (the operation is
+                # cheaper than the clock can resolve even with
+                # perf_counter, or n_iterations is too low). A division
+                # from a zero baseline would silently produce either 0.0
+                # or inf depending on which side hit zero first - neither
+                # is a real measurement, so report parity instead of a
+                # fabricated signal in either direction.
+                speedup = 1.0
         else:
             numba_time = numpy_time
             speedup = 1.0
@@ -179,25 +190,36 @@ class VectorizedAudioProcessor:
     ) -> Dict[str, float]:
         """Benchmark SNR estimation"""
         # NumPy version
-        start = time.time()
+        start = time.perf_counter()
         for _ in range(n_iterations):
             _ = _estimate_snr_numpy(clean, noisy)
-        numpy_time = (time.time() - start) / n_iterations * 1000  # ms
+        numpy_time = (time.perf_counter() - start) / n_iterations * 1000  # ms
 
         # Numba version (if available)
         if NUMBA_AVAILABLE:
             # Warm up JIT
             _ = _estimate_snr_numba(clean, noisy)
 
-            start = time.time()
+            start = time.perf_counter()
             for _ in range(n_iterations):
                 _ = _estimate_snr_numba(clean, noisy)
-            numba_time = (time.time() - start) / n_iterations * 1000  # ms
+            numba_time = (time.perf_counter() - start) / n_iterations * 1000  # ms
 
-            try:
+            if numpy_time > 0 and numba_time > 0:
                 speedup = numpy_time / numba_time
-            except ZeroDivisionError:
-                speedup = float("inf") if numpy_time > 0 else 1.0
+            elif numba_time == 0 and numpy_time > 0:
+                # Optimized version's time rounded to zero - genuinely too
+                # fast to measure at this resolution.
+                speedup = float("inf")
+            else:
+                # numpy_time itself rounded to zero (the operation is
+                # cheaper than the clock can resolve even with
+                # perf_counter, or n_iterations is too low). A division
+                # from a zero baseline would silently produce either 0.0
+                # or inf depending on which side hit zero first - neither
+                # is a real measurement, so report parity instead of a
+                # fabricated signal in either direction.
+                speedup = 1.0
         else:
             numba_time = numpy_time
             speedup = 1.0
@@ -213,25 +235,36 @@ class VectorizedAudioProcessor:
         frame_len = 512
 
         # NumPy version
-        start = time.time()
+        start = time.perf_counter()
         for _ in range(n_iterations):
             _ = _fast_rms_numpy(audio, frame_len)
-        numpy_time = (time.time() - start) / n_iterations * 1000  # ms
+        numpy_time = (time.perf_counter() - start) / n_iterations * 1000  # ms
 
         # Numba version (if available)
         if NUMBA_AVAILABLE:
             # Warm up JIT
             _ = _fast_rms_numba(audio, frame_len)
 
-            start = time.time()
+            start = time.perf_counter()
             for _ in range(n_iterations):
                 _ = _fast_rms_numba(audio, frame_len)
-            numba_time = (time.time() - start) / n_iterations * 1000  # ms
+            numba_time = (time.perf_counter() - start) / n_iterations * 1000  # ms
 
-            try:
+            if numpy_time > 0 and numba_time > 0:
                 speedup = numpy_time / numba_time
-            except ZeroDivisionError:
-                speedup = float("inf") if numpy_time > 0 else 1.0
+            elif numba_time == 0 and numpy_time > 0:
+                # Optimized version's time rounded to zero - genuinely too
+                # fast to measure at this resolution.
+                speedup = float("inf")
+            else:
+                # numpy_time itself rounded to zero (the operation is
+                # cheaper than the clock can resolve even with
+                # perf_counter, or n_iterations is too low). A division
+                # from a zero baseline would silently produce either 0.0
+                # or inf depending on which side hit zero first - neither
+                # is a real measurement, so report parity instead of a
+                # fabricated signal in either direction.
+                speedup = 1.0
         else:
             numba_time = numpy_time
             speedup = 1.0
