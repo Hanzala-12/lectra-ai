@@ -63,10 +63,10 @@ export function Layout() {
 
           <div className="hidden md:flex items-center gap-3">
             <Link
-              to="/login"
+              to="/app/dashboard"
               className="text-sm font-medium text-muted hover:text-primary transition-colors px-4 py-2"
             >
-              Sign In
+              Dashboard
             </Link>
             <Link
               to="/app/upload"
@@ -93,11 +93,11 @@ export function Layout() {
             <Link to="/about" className="text-lg font-medium hover:text-primary transition-colors" onClick={() => setMobileMenuOpen(false)}>About Us</Link>
             <div className="h-px bg-border my-2" />
             <Link
-              to="/login"
+              to="/app/dashboard"
               className="text-center font-medium text-primary px-5 py-3 rounded-lg border border-border hover:bg-surface2 transition-colors"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Sign In
+              Dashboard
             </Link>
             <Link
               to="/app/upload"

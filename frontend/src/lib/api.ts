@@ -267,6 +267,15 @@ export type AuthResponse = {
 export const api = {
   llmStatus: () => req<{ configured: boolean; model: string | null }>('/api/llm-status'),
 
+  // gpu_tunnel is null when no tunnel is configured at all (the normal
+  // local-CPU setup); {configured, reachable} once GPU_TUNNEL_URL is set.
+  health: () =>
+    req<{
+      status: string;
+      models_loaded: boolean;
+      gpu_tunnel: { configured: boolean; reachable: boolean | null } | null;
+    }>('/api/health'),
+
   library: () => req<{ lectures: LectureSummary[] }>('/api/library'),
   getLecture: (id: string) => req<Lecture>(`/api/lecture/${id}`),
   deleteLecture: (id: string) =>
@@ -373,10 +382,16 @@ export const api = {
     ),
 
   // ---------- auth ----------
-  signup: async (username: string, password: string, name?: string, email?: string) => {
+  signup: async (
+    username: string,
+    password: string,
+    confirmPassword: string,
+    name?: string,
+    email?: string,
+  ) => {
     const r = await req<AuthResponse>('/api/auth/signup', {
       method: 'POST',
-      body: JSON.stringify({ username, password, name, email }),
+      body: JSON.stringify({ username, password, confirm_password: confirmPassword, name, email }),
     });
     setToken(r.token);
     return r;

@@ -1,5 +1,5 @@
 import React, { useState, MouseEvent } from 'react';
-import { User, Lock, ArrowRight, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { User, Lock, ArrowRight, Sparkles, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
@@ -8,6 +8,7 @@ export function Login() {
   const [isHovered, setIsHovered] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -44,7 +45,7 @@ export function Login() {
     setError('');
     try {
       await api.login(username.trim(), password);
-      navigate('/app/dashboard');
+      navigate('/app/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -149,13 +150,23 @@ export function Login() {
                         <Lock className="w-5 h-5" />
                       </div>
                       <input
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         autoComplete="current-password"
-                        className="w-full bg-bg/50 border border-border rounded-xl py-3.5 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
+                        maxLength={128}
+                        className="w-full bg-bg/50 border border-border rounded-xl py-3.5 pl-12 pr-12 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
                         placeholder="••••••••"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted hover:text-primary transition-colors"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
                     </div>
                   </div>
 

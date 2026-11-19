@@ -207,7 +207,7 @@ def auth(isolated_repos) -> AuthedStudent:
     """Sign up a fresh throwaway student via the real /api/auth/signup route."""
     username = f"test_{os.urandom(4).hex()}"
     r = client.post(
-        "/api/auth/signup", json={"username": username, "password": "testpass123"}
+        "/api/auth/signup", json={"username": username, "password": "Test#Pass123"}
     )
     assert r.status_code == 200, r.text
     body = r.json()

@@ -20,6 +20,7 @@ from typing import List, Dict, Optional, Any
 from auth_utils import hash_password, verify_password
 
 _LOCK = threading.Lock()
+_DUMMY_HASH = hash_password("timing-equaliser")
 
 
 class UsernameTakenError(Exception):
@@ -104,6 +105,9 @@ class StudentRepository:
         """Return the student record if username+password match, else None."""
         record = self.get_by_username(username)
         if record is None:
+            # Burn the same PBKDF2 time as a real check so response timing
+            # doesn't reveal which usernames exist.
+            verify_password(password, _DUMMY_HASH)
             return None
         if not verify_password(password, record.get("password_hash", "")):
             return None

@@ -102,7 +102,7 @@ def test_cannot_see_another_students_lecture(auth):
     # a second, different student
     r = client.post(
         "/api/auth/signup",
-        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+        json={"username": f"other_{lec['id']}", "password": "Test#Pass123"},
     )
     other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
 
@@ -211,7 +211,7 @@ def test_rename_speakers_404_for_another_students_lecture(auth):
     lec = _lecture(auth)
     r = client.post(
         "/api/auth/signup",
-        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+        json={"username": f"other_{lec['id']}", "password": "Test#Pass123"},
     )
     other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
 
@@ -328,7 +328,7 @@ def test_reference_notes_404_for_another_students_lecture(auth):
     lec = _lecture(auth)
     r = client.post(
         "/api/auth/signup",
-        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+        json={"username": f"other_{lec['id']}", "password": "Test#Pass123"},
     )
     other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
 
@@ -472,7 +472,7 @@ def test_reference_files_404_for_another_students_lecture(auth):
     lec = _lecture(auth)
     r = client.post(
         "/api/auth/signup",
-        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+        json={"username": f"other_{lec['id']}", "password": "Test#Pass123"},
     )
     other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
 
@@ -850,7 +850,7 @@ def test_review_schedule_endpoint_404_for_another_students_lecture(auth):
     lec = _lecture(auth)
     r = client.post(
         "/api/auth/signup",
-        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+        json={"username": f"other_{lec['id']}", "password": "Test#Pass123"},
     )
     other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
     r2 = client.get(f"/api/lecture/{lec['id']}/review-schedule", headers=other_headers)
@@ -946,7 +946,7 @@ def test_recap_404_for_another_students_lecture(auth):
     lec = _lecture(auth)
     r = client.post(
         "/api/auth/signup",
-        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+        json={"username": f"other_{lec['id']}", "password": "Test#Pass123"},
     )
     other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
     r2 = client.post(f"/api/lecture/{lec['id']}/recap", headers=other_headers)
@@ -1044,7 +1044,7 @@ def test_chat_stream_404_for_another_students_lecture(auth):
     lec = _lecture(auth)
     r = client.post(
         "/api/auth/signup",
-        json={"username": f"other_{lec['id']}", "password": "testpass123"},
+        json={"username": f"other_{lec['id']}", "password": "Test#Pass123"},
     )
     other_headers = {"Authorization": f"Bearer {r.json()['token']}"}
     r2 = client.post(

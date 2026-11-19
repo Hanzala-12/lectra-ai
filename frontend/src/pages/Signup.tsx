@@ -1,7 +1,54 @@
 import React, { useState, MouseEvent } from 'react';
-import { Lock, User, AtSign, Mail, ArrowRight, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import {
+  Lock, User, AtSign, Mail, ArrowRight, Sparkles, Loader2, AlertCircle,
+  Eye, EyeOff, Check, X, ShieldCheck,
+} from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import {
+  validateUsername, validateName, validateEmail, validatePassword, validateConfirm,
+  passwordChecks, passwordStrength,
+} from '../lib/validation';
+
+const INPUT_BASE =
+  'w-full bg-bg/50 border rounded-xl py-3 pl-12 text-text placeholder:text-muted/50 focus:ring-1 outline-none transition-all shadow-sm';
+const inputClass = (hasError: boolean, extraRight = 'pr-4') =>
+  `${INPUT_BASE} ${extraRight} ${
+    hasError ? 'border-error focus:border-error focus:ring-error' : 'border-border focus:border-primary focus:ring-primary'
+  }`;
+
+const STRENGTH_COLORS = ['bg-border', 'bg-error', 'bg-amber-500', 'bg-lime-500', 'bg-emerald-500'];
+
+type FieldName = 'name' | 'email' | 'username' | 'password' | 'confirm';
+
+function FieldShell({
+  label, optional, icon, error, children,
+}: {
+  label: string;
+  optional?: boolean;
+  icon: React.ReactNode;
+  error: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-muted ml-1">
+        {label} {optional && <span className="text-muted/60 font-normal">(optional)</span>}
+      </label>
+      <div className="relative group">
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
+          {icon}
+        </div>
+        {children}
+      </div>
+      {error && (
+        <p className="text-xs text-error ml-1 flex items-center gap-1" role="alert">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function Signup() {
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
@@ -10,9 +57,28 @@ export function Signup() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  const errors: Record<FieldName, string | null> = {
+    name: validateName(name),
+    email: validateEmail(email),
+    username: validateUsername(username),
+    password: validatePassword(password, username),
+    confirm: validateConfirm(password, confirm),
+  };
+  const isValid = Object.values(errors).every((e) => e === null);
+  // Show a field's error once the user has left it (or tried to submit).
+  const shown = (f: FieldName) => (touched[f] ? errors[f] : null);
+  const touch = (f: FieldName) => setTouched((t) => ({ ...t, [f]: true }));
+
+  const checks = passwordChecks(password, username);
+  const strength = passwordStrength(password, username);
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!e.currentTarget) return;
@@ -38,25 +104,34 @@ export function Signup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password) {
-      setError('Username and password are required.');
-      return;
-    }
-    if (password.length < 4) {
-      setError('Password should be at least 4 characters.');
+    setTouched({ name: true, email: true, username: true, password: true, confirm: true });
+    if (!isValid) {
+      setError('Please fix the highlighted fields.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      await api.signup(username.trim(), password, name.trim() || undefined, email.trim() || undefined);
-      navigate('/app/dashboard');
+      await api.signup(username.trim(), password, confirm, name.trim() || undefined, email.trim() || undefined);
+      navigate('/app/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Sign up failed');
     } finally {
       setLoading(false);
     }
   };
+
+  const eyeButton = (visible: boolean, toggle: () => void, label: string) => (
+    <button
+      type="button"
+      onClick={toggle}
+      aria-label={label}
+      className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted hover:text-primary transition-colors"
+      tabIndex={-1}
+    >
+      {visible ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+    </button>
+  );
 
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center relative overflow-hidden font-sans perspective-1000 py-12">
@@ -94,81 +169,119 @@ export function Signup() {
                   <p className="text-muted text-sm">Join Lectra-AI and transform how you learn</p>
                 </div>
 
-                <form className="space-y-6" onSubmit={handleSubmit}>
+                <form className="space-y-5" onSubmit={handleSubmit} noValidate>
                   {error && (
-                    <div className="flex items-start gap-2 rounded-xl border border-error/30 bg-error-light px-4 py-3 text-sm text-error">
+                    <div className="flex items-start gap-2 rounded-xl border border-error/30 bg-error-light px-4 py-3 text-sm text-error" role="alert">
                       <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                       <span>{error}</span>
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted ml-1">Full Name</label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
-                        <User className="w-5 h-5" />
-                      </div>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        autoComplete="name"
-                        className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
-                        placeholder="John Doe"
-                      />
-                    </div>
-                  </div>
+                  <FieldShell label="Full Name" optional icon={<User className="w-5 h-5" />} error={shown('name')}>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      onBlur={() => touch('name')}
+                      autoComplete="name"
+                      maxLength={60}
+                      className={inputClass(!!shown('name'))}
+                      placeholder="John Doe"
+                    />
+                  </FieldShell>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted ml-1">Email <span className="text-muted/60 font-normal">(optional)</span></label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
-                        <Mail className="w-5 h-5" />
-                      </div>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        autoComplete="email"
-                        className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
-                        placeholder="john@nuces.edu.pk"
-                      />
-                    </div>
-                  </div>
+                  <FieldShell label="Email" optional icon={<Mail className="w-5 h-5" />} error={shown('email')}>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onBlur={() => touch('email')}
+                      autoComplete="email"
+                      maxLength={254}
+                      className={inputClass(!!shown('email'))}
+                      placeholder="john@nuces.edu.pk"
+                    />
+                  </FieldShell>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted ml-1">Username</label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
-                        <AtSign className="w-5 h-5" />
-                      </div>
-                      <input
-                        type="text"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        autoComplete="username"
-                        className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
-                        placeholder="hanzala"
-                      />
-                    </div>
-                  </div>
+                  <FieldShell label="Username" icon={<AtSign className="w-5 h-5" />} error={shown('username')}>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      onBlur={() => touch('username')}
+                      autoComplete="username"
+                      maxLength={20}
+                      className={inputClass(!!shown('username'))}
+                      placeholder="hanzala"
+                    />
+                  </FieldShell>
+                  <p className="-mt-3 text-xs text-muted/70 ml-1">
+                    3-20 characters, starts with a letter. Letters, numbers, _ and . only.
+                  </p>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted ml-1">Password</label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted group-focus-within:text-primary transition-colors">
-                        <Lock className="w-5 h-5" />
+                  <FieldShell label="Password" icon={<Lock className="w-5 h-5" />} error={shown('password')}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onBlur={() => touch('password')}
+                      autoComplete="new-password"
+                      maxLength={128}
+                      className={inputClass(!!shown('password'), 'pr-12')}
+                      placeholder="••••••••"
+                    />
+                    {eyeButton(showPassword, () => setShowPassword((v) => !v), showPassword ? 'Hide password' : 'Show password')}
+                  </FieldShell>
+
+                  {password && (
+                    <div className="-mt-2 space-y-3" aria-live="polite">
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-1 gap-1.5">
+                          {[1, 2, 3, 4].map((i) => (
+                            <div
+                              key={i}
+                              className={`h-1.5 flex-1 rounded-full transition-colors ${
+                                i <= strength.score ? STRENGTH_COLORS[strength.score] : 'bg-border'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs font-medium text-muted w-20 text-right">{strength.label}</span>
                       </div>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="new-password"
-                        className="w-full bg-bg/50 border border-border rounded-xl py-3 pl-12 pr-4 text-text placeholder:text-muted/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-sm"
-                        placeholder="••••••••"
-                      />
+                      <ul className="grid grid-cols-1 gap-1">
+                        {checks.map((c) => (
+                          <li
+                            key={c.id}
+                            className={`flex items-center gap-2 text-xs transition-colors ${
+                              c.ok ? 'text-emerald-600' : 'text-muted'
+                            }`}
+                          >
+                            {c.ok ? <Check className="w-3.5 h-3.5 shrink-0" /> : <X className="w-3.5 h-3.5 shrink-0 opacity-50" />}
+                            {c.label}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                  </div>
+                  )}
+
+                  <FieldShell label="Confirm Password" icon={<ShieldCheck className="w-5 h-5" />} error={shown('confirm')}>
+                    <input
+                      type={showConfirm ? 'text' : 'password'}
+                      value={confirm}
+                      onChange={(e) => setConfirm(e.target.value)}
+                      onBlur={() => touch('confirm')}
+                      autoComplete="new-password"
+                      maxLength={128}
+                      className={inputClass(!!shown('confirm'), 'pr-12')}
+                      placeholder="••••••••"
+                    />
+                    {eyeButton(showConfirm, () => setShowConfirm((v) => !v), showConfirm ? 'Hide confirmation' : 'Show confirmation')}
+                  </FieldShell>
+                  {confirm && !errors.confirm && (
+                    <p className="-mt-3 text-xs text-emerald-600 ml-1 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> Passwords match
+                    </p>
+                  )}
 
                   <button
                     type="submit"

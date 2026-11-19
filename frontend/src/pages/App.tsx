@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, Settings, FileAudio, Play, Download, CheckCircle2, AlertCircle, Loader2, ChevronDown, ChevronUp, X, Sparkles, Wind, Users2, Mic2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
-import { getToken } from '../lib/api';
+import { api, getToken } from '../lib/api';
 
 type ProcessState = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
@@ -86,6 +86,20 @@ export function App() {
   const [transcriptFormat, setTranscriptFormat] = useState<TranscriptFormat>('txt');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+
+  // Where processing will actually run. The GPU tunnel is a free Kaggle
+  // session that expires (~40min idle, ~9-12h max) and silently falls back
+  // to local CPU when it drops — without this, a lecture that took 2
+  // minutes yesterday quietly takes 20 today with nothing explaining why.
+  // Only shown when a tunnel is actually configured; a plain local setup
+  // (gpu_tunnel: null) gets no nag about a feature it isn't using.
+  const [gpuTunnel, setGpuTunnel] = useState<{ configured: boolean; reachable: boolean | null } | null>(null);
+
+  useEffect(() => {
+    api.health()
+      .then((h) => setGpuTunnel(h.gpu_tunnel))
+      .catch(() => setGpuTunnel(null));
+  }, []);
 
   useEffect(() => {
     if (toast) {
@@ -212,6 +226,18 @@ export function App() {
         <div>
           <h1 className="font-serif text-4xl font-semibold tracking-tight text-text mb-2">Upload lecture</h1>
           <p className="text-sm text-muted">Get a clean transcript, notes, and a practice quiz.</p>
+          {gpuTunnel?.configured && (
+            <p className="mt-2.5 flex items-center gap-2 text-xs text-muted">
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  gpuTunnel.reachable ? 'bg-success' : 'bg-warning'
+                }`}
+              />
+              {gpuTunnel.reachable
+                ? 'GPU accelerated — audio is processed on the remote GPU worker.'
+                : 'GPU worker unreachable — processing locally on CPU, which is slower.'}
+            </p>
+          )}
         </div>
 
         <button

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Layout } from './components/Layout';
 import { AppLayout } from './components/AppLayout';
@@ -22,6 +22,22 @@ import { Analytics } from './pages/Analytics';
 import { Chat } from './pages/Chat';
 import { Lecture } from './pages/Lecture';
 import { NotFound } from './pages/NotFound';
+import { getToken } from './lib/api';
+
+// The only public routes are /login and /signup. Everything else (marketing
+// pages included) needs a session token; AppLayout then verifies it against
+// the server and bounces back to /login if it has expired.
+function RequireAuth() {
+  const location = useLocation();
+  if (!getToken()) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  return <Outlet />;
+}
+
+// Already signed in? Skip the login/signup screens.
+function GuestOnly() {
+  if (getToken()) return <Navigate to="/app/dashboard" replace />;
+  return <Outlet />;
+}
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -41,33 +57,39 @@ function AnimatedRoutes() {
         className="w-full min-h-screen"
       >
         <Routes location={location}>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
-            
-            <Route path="features" element={<Features />} />
-          <Route path="docs" element={<Docs />} />
-          <Route path="about" element={<About />} />
-          <Route path="login" element={<Login />} />
-          <Route path="signup" element={<Signup />} />
-          
-          {/* Placeholders for other routes */}
-          <Route path="use-cases" element={<div className="p-24 text-center text-xl">Use Cases Page</div>} />
-          <Route path="privacy" element={<div className="p-24 text-center text-xl">Privacy Policy</div>} />
-          <Route path="terms" element={<div className="p-24 text-center text-xl">Terms of Service</div>} />
-          
-          <Route path="*" element={<NotFound />} />
-        </Route>
+          {/* Public: sign-in screens only */}
+          <Route element={<GuestOnly />}>
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+          </Route>
 
-        <Route path="/app" element={<AppLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="upload" element={<DemoApp />} />
-          <Route path="library" element={<Library />} />
-          <Route path="lecture/:id" element={<Lecture />} />
-          <Route path="quiz" element={<Quiz />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="chat" element={<Chat />} />
-        </Route>
+          {/* Everything else requires a signed-in student */}
+          <Route element={<RequireAuth />}>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Home />} />
+              <Route path="features" element={<Features />} />
+              <Route path="docs" element={<Docs />} />
+              <Route path="about" element={<About />} />
+
+              {/* Placeholders for other routes */}
+              <Route path="use-cases" element={<div className="p-24 text-center text-xl">Use Cases Page</div>} />
+              <Route path="privacy" element={<div className="p-24 text-center text-xl">Privacy Policy</div>} />
+              <Route path="terms" element={<div className="p-24 text-center text-xl">Terms of Service</div>} />
+
+              <Route path="*" element={<NotFound />} />
+            </Route>
+
+            <Route path="/app" element={<AppLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="upload" element={<DemoApp />} />
+              <Route path="library" element={<Library />} />
+              <Route path="lecture/:id" element={<Lecture />} />
+              <Route path="quiz" element={<Quiz />} />
+              <Route path="analytics" element={<Analytics />} />
+              <Route path="chat" element={<Chat />} />
+            </Route>
+          </Route>
         </Routes>
       </motion.div>
     </AnimatePresence>
