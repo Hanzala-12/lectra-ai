@@ -140,6 +140,14 @@ class FakeLLM:
 
 
 @pytest.fixture(autouse=True)
+def isolated_outputs(tmp_path, monkeypatch):
+    """Recap audio is written under study_api._OUTPUTS_DIR; point it at a temp
+    folder so test runs never create files in the real outputs/ directory."""
+    monkeypatch.setattr(study_api, "_OUTPUTS_DIR", str(tmp_path / "outputs"))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def fake_llm(monkeypatch):
     fake = FakeLLM()
     monkeypatch.setattr(study_api, "get_llm", lambda: fake)
