@@ -390,11 +390,11 @@ class LLMClient:
                             if data.strip() == "[DONE]":
                                 return
                             chunk = _json.loads(data)
-                            delta = (
-                                chunk.get("choices", [{}])[0]
-                                .get("delta", {})
-                                .get("content")
-                            )
+                            # Some providers send chunks with an empty
+                            # "choices" list (e.g. the final usage-stats
+                            # chunk) - skip those instead of indexing [0].
+                            choices = chunk.get("choices") or [{}]
+                            delta = (choices[0].get("delta") or {}).get("content")
                             if delta:
                                 yield delta
                         return
