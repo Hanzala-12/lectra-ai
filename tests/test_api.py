@@ -59,7 +59,7 @@ def test_invalid_file_type():
     by test_process_requires_auth above)."""
     signup = client.post(
         "/api/auth/signup",
-        json={"username": "filetype_tester", "password": "testpass123"},
+        json={"username": "filetype_tester", "password": "Test#Pass123"},
     )
     headers = {"Authorization": f"Bearer {signup.json()['token']}"}
 
@@ -80,3 +80,34 @@ def test_invalid_whisper_model():
 
 
 # Add more API tests
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "..%2Fconfig.yaml",
+        "..%5Cconfig.yaml",  # Windows separator - was served before the fix
+        "..%5C..%5C.env",
+        "%2e%2e%5cconfig.yaml",
+        "C%3A%5CWindows%5Cwin.ini",
+    ],
+)
+def test_download_blocks_path_traversal(name):
+    """/api/download must never serve files from outside outputs/."""
+    response = client.get(f"/api/download/{name}")
+    assert response.status_code in (400, 404)
+
+
+def test_download_serves_file_inside_outputs():
+    outputs = os.path.join(os.path.dirname(__file__), "..", "outputs")
+    os.makedirs(outputs, exist_ok=True)
+    fname = "qa_regression_probe.txt"
+    path = os.path.join(outputs, fname)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("probe")
+    try:
+        response = client.get(f"/api/download/{fname}")
+        assert response.status_code == 200
+        assert response.content == b"probe"
+    finally:
+        os.remove(path)

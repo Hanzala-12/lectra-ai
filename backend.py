@@ -749,9 +749,16 @@ async def process_lecture(
 @app.get("/api/download/{filename}")
 async def download_file(filename: str):
     """Download processed file"""
-    file_path = os.path.join(os.path.dirname(__file__), "outputs", filename)
+    outputs_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), "outputs"))
+    file_path = os.path.realpath(os.path.join(outputs_dir, filename))
 
-    if not os.path.exists(file_path):
+    # Path-traversal guard: the resolved path must stay inside outputs/. A bare
+    # "/" check isn't enough - on Windows "..\\x" is a separator too.
+    if (
+        Path(filename).name != filename
+        or os.path.commonpath([outputs_dir, file_path]) != outputs_dir
+        or not os.path.isfile(file_path)
+    ):
         raise HTTPException(status_code=404, detail="File not found")
 
     suffix = Path(filename).suffix.lower()

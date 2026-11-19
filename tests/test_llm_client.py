@@ -229,6 +229,30 @@ def test_different_keys_use_their_own_model(monkeypatch):
     assert calls[1].kwargs["json"]["model"] == "model-two"
 
 
+def test_discontinued_model_404_rotates_to_next_key_and_its_model(monkeypatch):
+    """A retired primary model (HTTP 404) must fail over to key 2 / model 2
+    instead of surfacing as a failed request (found by QA: the .env's retired
+    primary model broke every LLM feature despite two working fallbacks)."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key-1")
+    monkeypatch.setenv("OPENROUTER_API_KEY_2", "fake-key-2")
+    monkeypatch.delenv("OPENROUTER_API_KEY_3", raising=False)
+    monkeypatch.setenv("OPENROUTER_MODEL", "retired-model")
+    monkeypatch.setenv("OPENROUTER_MODEL_2", "live-model")
+    client = LLMClient(max_retries=1)
+
+    mock_httpx_client = MagicMock()
+    mock_httpx_client.__enter__.return_value.post.side_effect = [
+        _fake_response(404),
+        _fake_response(200, "answered by the fallback"),
+    ]
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    with patch("httpx.Client", return_value=mock_httpx_client):
+        answer = client.chat([{"role": "user", "content": "hi"}])
+    assert answer == "answered by the fallback"
+    calls = mock_httpx_client.__enter__.return_value.post.call_args_list
+    assert [c.kwargs["json"]["model"] for c in calls] == ["retired-model", "live-model"]
+
+
 def test_per_key_model_falls_back_to_shared_default(monkeypatch):
     # Only OPENROUTER_MODEL set (no per-key overrides) - every key must use
     # it, exactly like before this feature existed.

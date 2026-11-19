@@ -28,10 +28,11 @@ class LLMNotConfigured(Exception):
 
 # Transient — worth retrying the SAME key with backoff first.
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
-# Key/account-specific — retrying the same key is pointless, move on to the
+# Key/model-specific — retrying the same key is pointless, move on to the
 # next configured key immediately (no backoff wasted on a key that's simply
-# out of credits or revoked).
-KEY_ROTATE_STATUS_CODES = {401, 402}
+# out of credits or revoked, or whose model was discontinued: OpenRouter
+# answers 404 for a retired model, and each key can have its own model).
+KEY_ROTATE_STATUS_CODES = {401, 402, 404}
 
 
 def _collect_api_keys(explicit: Optional[str]) -> List[str]:
